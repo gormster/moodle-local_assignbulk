@@ -159,6 +159,10 @@ class bulk_uploader {
         }
 
         // Create a reverse lookup array for idents
+        if (!isset($this->_useridents)) {
+            $this->_init_useridents();
+        }
+
         $useridentsreverse = [];
         foreach ($this->_useridents as $userident => $user) {
             $useridentsreverse[$user->id] = $userident;
@@ -336,6 +340,9 @@ class bulk_uploader {
         $participants = $this->assign->list_participants(0, false);
 
         foreach ($participants as $user) {
+            if (empty($user->$ident)) {
+                continue;
+            }
             if (isset($useridents[$user->$ident])) {
                 throw new moodle_exception('identnotunique', 'local_assignbulk', null, ['ident' => $ident, 'value' => $user->$ident]);
             }
