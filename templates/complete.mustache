@@ -1,0 +1,66 @@
+{{!
+    @template local_assignbulk/complete
+
+    Notifies the user that their upload was successul.
+
+    Example context (json):
+
+    {
+        "users": [
+            {
+                "fullname": "Example User 1",
+                "submissions": [
+                    {
+                        "filename": "example1.pdf"
+                    },
+                    {
+                        "filename": "example2.pptx"
+                    }
+                ]
+            },
+            {
+                "fullname": "Example User 2",
+                "submissions": [
+                    {
+                        "filename": "example3.pdf"
+                    },
+                    {
+                        "filename": "example4.zip"
+                    }
+                ]
+            },
+            {
+                "fullname": "Example User 3",
+                "notices": [
+                    "Couldn't upload because of reason x"
+                ]
+            }
+        ]
+    }
+}}
+
+{{#preview}}
+{{#str}} uploadpreview, local_assignbulk {{/str}}
+{{/preview}}
+{{^preview}}
+{{#str}} uploadcomplete, local_assignbulk {{/str}}
+{{/preview}}
+<ul>
+{{#users}}
+<li>{{fullname}}
+<ul>
+{{#notices}}
+<li class="notice">{{.}}</li>
+{{/notices}}
+{{#submissions}}
+<li>{{filename}}</li>
+{{/submissions}}
+</ul></li>
+{{/users}}
+</ul>
+{{#anywarnings}}{{#str}} warnings, local_assignbulk {{/str}}{{/anywarnings}}
+<ul class="bg-warning">
+    {{#warnings}}
+    <li>{{.}}</li>
+    {{/warnings}}
+</ul>
