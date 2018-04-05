@@ -12,16 +12,18 @@ function local_assignbulk_extend_settings_navigation(settings_navigation $nav, c
         return;
     }
 
-    $coursecontext = $context->get_course_context();
+    list($course, $cm) = get_course_and_cm_from_cmid($context->instanceid);
 
-    $cmid = $context->instanceid;
-    $courseid = $coursecontext->instanceid;
-
-    $modinfo = get_fast_modinfo($courseid)->cms[$cmid];
-
-    if ($modinfo->modname != 'assign') {
+    if ($cm->modname != 'assign') {
         return;
     }
+
+    $assign = new assign($context, $cm, $course);
+    $plugin = $assign->get_submission_plugin_by_type('file');
+    if (!$plugin->is_enabled()) {
+        return;
+    }
+
 
     // Now we're sure we're in the right place, add a button to the navtree
 
@@ -30,7 +32,7 @@ function local_assignbulk_extend_settings_navigation(settings_navigation $nav, c
         return;
     }
 
-    $link = new moodle_url('/local/assignbulk/upload.php', array('id' => $cmid));
+    $link = new moodle_url('/local/assignbulk/upload.php', array('id' => $cm->id));
     $node->add(get_string('bulkuploadsubmissions', 'local_assignbulk'), $link, navigation_node::TYPE_SETTING);
 
 }
