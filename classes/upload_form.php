@@ -17,6 +17,7 @@ class upload_form extends \moodleform {
         $mform->setType('id', PARAM_INT);
 
         $mform->addElement('filemanager', 'submissions', get_string('file', 'assignsubmission_file')); // Add elements to your form
+        $mform->addRule('submissions', null, 'required');
 
         $options = [
             'username' => get_string('username'),
