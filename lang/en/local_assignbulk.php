@@ -1,5 +1,5 @@
 <?php
-// This file is part of Moodle - http://moodle.org/
+// This file is part of moodle-local_assignbulk - https://github.com/gormster/moodle-local_assignbulk/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Assignment Bulk Upload';
 $string['bulkuploadsubmissions'] = 'Bulk upload submissions';
-// TODO: this is terrible, fix it
+// TODO: this is terrible, fix it!
 $string['uploadhelp'] = <<<HTML
 <p>Using this tool, you can upload assignment submissions as files. Note that this only works for the <strong>File</strong> submission type.</p>
 <p>You can upload individual files, a ZIP containing the submission files, or multiple ZIP files containing multiple file submissions for each student. You should name each submission file with some way to identify the student, either with their username, ID number, or email address.</p>

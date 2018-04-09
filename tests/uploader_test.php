@@ -1,4 +1,26 @@
 <?php
+// This file is part of moodle-local_assignbulk - https://github.com/gormster/moodle-local_assignbulk/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Test the uploader
+ *
+ * @package     local_assignbulk\tests
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -17,7 +39,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
     protected $teacher;
 
-    function setUp() {
+    public function setUp() {
         $this->resetAfterTest();
 
         $this->setAdminUser();
@@ -25,74 +47,23 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         $this->course = $this->getDataGenerator()->create_course();
 
         $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
-        $assign = $generator->create_instance(array('course'=>$this->course->id, 'teamsubmission' => true));
+        $assign = $generator->create_instance(array('course' => $this->course->id, 'teamsubmission' => true));
         $context = context_module::instance($assign->cmid);
         $this->assign = new assign($context, null, $this->course);
 
-        // make some users & some groups
-        for($i = 0; $i < 20; $i++) {
+        // Make some users & some groups.
+        for ($i = 0; $i < 20; $i++) {
             $user = $this->getDataGenerator()->create_user();
             $this->students[$user->id] = $user;
             $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
         }
 
-        // make a teacher role
+        // Make a teacher role.
         $this->teacher = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($this->teacher->id, $this->course->id, 'editingteacher');
     }
 
-    // function test_folder_name_1() {
-    //     $uploader = new bulk_uploader($this->assign, 'username');
-
-    //     $names = array_map([$uploader, 'folder_name'], array_keys($this->students));
-
-    //     $this->assertEquals(count($this->students), count($names), "Should be exactly one folder per user");
-
-    //     $duplicates = array_diff(array_count_values($names), [1]);
-    //     $this->assertEmpty($duplicates, "Some names appear more than once: " . print_r($duplicates, true));
-    // }
-
-    // function test_folder_name_2() {
-
-    //     // Add a second student with the same name
-    //     $eight = array_values($this->students)[8];
-    //     $new = new stdClass;
-    //     $new->firstname = $eight->firstname;
-    //     $new->lastname = $eight->lastname;
-
-    //     $newuser = $this->getDataGenerator()->create_user($new);
-    //     $this->students[$newuser->id] = $newuser;
-    //     $this->getDataGenerator()->enrol_user($newuser->id, $this->course->id);
-
-    //     // Perform test
-    //     $this->test_folder_name_1();
-    // }
-
-    // function test_folder_name_3() {
-    //     global $DB;
-
-    //     foreach ($this->students as $user) {
-    //         $user->firstname = "Borg";
-    //         $user->lastname = "Borgensson";
-    //         $DB->update_record('user', $user);
-    //     }
-
-    //     $this->test_folder_name_1();
-    // }
-
-    // /**
-    //  * @expectedException moodle_exception
-    //  * @expectedExceptionMessage not a submitter
-    //  */
-    // function test_folder_name_4() {
-    //     // Add a user who isn't enrolled in this course
-    //     $newuser = $this->getDataGenerator()->create_user();
-    //     $this->students[$newuser->id] = $newuser;
-
-    //     $this->test_folder_name_1();
-    // }
-
-    function test_user_for_ident_1() {
+    public function test_user_for_ident_1() {
         $uploader = new bulk_uploader($this->assign, 'username');
 
         $usernames = [];
@@ -105,7 +76,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
     }
 
-    function test_user_for_ident_2() {
+    public function test_user_for_ident_2() {
         $uploader = new bulk_uploader($this->assign, 'email');
 
         $emails = [];
@@ -118,7 +89,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
     }
 
-    function test_user_for_ident_3() {
+    public function test_user_for_ident_3() {
         global $DB;
 
         $uploader = new bulk_uploader($this->assign, 'idnumber');
@@ -139,7 +110,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
      * @expectedException moodle_exception
      * @expectedExceptionMessage not unique
      */
-    function test_user_for_ident_4() {
+    public function test_user_for_ident_4() {
         global $DB;
 
         $uploader = new bulk_uploader($this->assign, 'idnumber');
@@ -152,8 +123,6 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         }
 
         $users = array_map([$uploader, 'user_for_ident'], $idnumbers);
-
-
     }
 
 }

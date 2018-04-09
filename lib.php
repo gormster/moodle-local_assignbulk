@@ -1,4 +1,18 @@
 <?php
+// This file is part of moodle-local_assignbulk - https://github.com/gormster/moodle-local_assignbulk/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 defined('MOODLE_INTERNAL') || die;
 
@@ -24,8 +38,7 @@ function local_assignbulk_extend_settings_navigation(settings_navigation $nav, c
         return;
     }
 
-
-    // Now we're sure we're in the right place, add a button to the navtree
+    // Now we're sure we're in the right place, add a button to the navtree.
 
     $node = $nav->find('modulesettings', navigation_node::TYPE_SETTING);
     if (empty($node)) {
@@ -36,5 +49,3 @@ function local_assignbulk_extend_settings_navigation(settings_navigation $nav, c
     $node->add(get_string('bulkuploadsubmissions', 'local_assignbulk'), $link, navigation_node::TYPE_SETTING);
 
 }
-
-?>

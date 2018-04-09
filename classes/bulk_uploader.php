@@ -1,4 +1,26 @@
 <?php
+// This file is part of moodle-local_assignbulk - https://github.com/gormster/moodle-local_assignbulk/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * An uploader handles the work of uploading one lot of assignment submissions.
+ *
+ * @package     local_assignbulk
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 
 namespace local_assignbulk;
 
@@ -10,6 +32,8 @@ use stored_file;
 use stdClass;
 use moodle_url;
 
+defined('MOODLE_INTERNAL') or die();
+
 class bulk_uploader {
 
     private $assign;
@@ -18,39 +42,39 @@ class bulk_uploader {
 
     private $staging;
 
-    private $error_url;
+    private $errorurl;
 
     private $commit;
 
-    function __construct($assign, $ident) {
+    public function __construct($assign, $ident) {
         $this->assign = $assign;
         $this->ident = $ident;
         $id = $assign->get_course_module()->id;
-        $this->error_url = new moodle_url('local/assignbulk/upload.php', ['id' => $id]);
+        $this->errorurl = new moodle_url('local/assignbulk/upload.php', ['id' => $id]);
     }
 
-    function execute($draftitemid, $commit = true) {
+    public function execute($draftitemid, $commit = true) {
 
         $feedback = new stdClass();
 
         $this->commit = $commit;
 
-        // 1. Copy files to staging area
+        // 1. Copy files to staging area.
         $this->save_draft_files($draftitemid);
 
-        // 2. Unzip any top level compressed files that don't match the naming scheme
+        // 2. Unzip any top level compressed files that don't match the naming scheme.
         $this->unzip_top_level_files();
 
-        // 3. Walk the tree
+        // 3. Walk the tree.
         $this->walk_step('/');
 
-        // 4. Submit the files for the users
+        // 4. Submit the files for the users.
         $feedback->users = $this->submit_user_files();
 
-        // 5. Make a note of the remaining non-directory contents of the staging area to report to the user
+        // 5. Make a note of the remaining non-directory contents of the staging area to report to the user.
         $feedback->warnings = $this->remaining_unstaged_files();
 
-        // 6. Delete the contents of the staging area
+        // 6. Delete the contents of the staging area.
         if (empty($feedback->warnings)) {
             $this->delete_staging_area();
         }
@@ -59,13 +83,13 @@ class bulk_uploader {
 
     }
 
-    function save_draft_files($draftitemid, $delete = false) {
+    protected function save_draft_files($draftitemid, $delete = false) {
         global $USER;
 
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
 
-        // Clear the area first
+        // Clear the area first.
         $fs->delete_area_files($contextid, 'local_assignbulk', 'staging');
         $fs->delete_area_files($contextid, 'local_assignbulk', 'submissions');
 
@@ -83,43 +107,43 @@ class bulk_uploader {
         $this->staging = [$change->contextid, $change->component, $change->filearea, $draftitemid];
     }
 
-    function unzip_top_level_files() {
+    protected function unzip_top_level_files() {
         $fs = get_file_storage();
         $s = $this->staging;
         $topfiles = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], '/', false, false);
         foreach ($topfiles as $file) {
-            // If the item is not a compressed file, continue
+            // If the item is not a compressed file, continue.
             $mimetype = $file->get_mimetype();
             $packer = get_file_packer($mimetype);
             if (empty($packer)) {
                 continue;
             }
 
-            // If the item matches the naming scheme, continue
+            // If the item matches the naming scheme, continue.
             $filename = $this->effective_file_name($file);
             if (!empty($this->user_for_ident($filename, false))) {
                 continue;
             }
 
-            // Unzip the item in place
+            // Unzip the item in place.
             $pathbase = '/' . $file->get_filename() . '/';
             $fs->create_directory($s[0], $s[1], $s[2], $s[3], $pathbase);
             $results = $file->extract_to_storage($packer, $s[0], $s[1], $s[2], $s[3], $pathbase);
 
-            // If unzipping the file causes any overwritten files, throw an exception
-            foreach($results as $filename => $result) {
+            // If unzipping the file causes any overwritten files, throw an exception.
+            foreach ($results as $filename => $result) {
                 if ($result != true) {
-                    throw new moodle_exception('local_assignbulk', 'unpackerror', $this->error_url, $result);
+                    throw new moodle_exception('local_assignbulk', 'unpackerror', $this->errorurl, $result);
                 }
             }
 
             // Delete the zip file so it doesn't show up as a leftover when
-            // checking the remaining contents of the staging area
+            // checking the remaining contents of the staging area.
             $file->delete();
         }
     }
 
-    function walk_step($directory) {
+    protected function walk_step($directory) {
         $fs = get_file_storage();
         $s = $this->staging;
         $files = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], $directory, false, true);
@@ -144,7 +168,7 @@ class bulk_uploader {
         }
     }
 
-    function submit_user_files() {
+    protected function submit_user_files() {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
 
@@ -158,7 +182,7 @@ class bulk_uploader {
             $submissions[$itemid][] = $file;
         }
 
-        // Create a reverse lookup array for idents
+        // Create a reverse lookup array for idents.
         if (!isset($this->_useridents)) {
             $this->_init_useridents();
         }
@@ -177,8 +201,11 @@ class bulk_uploader {
             if ($this->commit) {
                 $feedback[] = $this->push_files_to_assign($files, $user);
             } else {
-                // Mock up preview feedback
-                $feedback[] = ['fullname' => fullname($user), 'submissions' => array_map(function($v) { return ['filename' => $v->get_filename()]; }, $files)];
+                // Mock up preview feedback.
+                $feedback[] = ['fullname' => fullname($user),
+                'submissions' => array_map(function($v) {
+                    return ['filename' => $v->get_filename()];
+                }, $files)];
             }
         }
 
@@ -186,13 +213,13 @@ class bulk_uploader {
 
     }
 
-    function remaining_unstaged_files() {
+    protected function remaining_unstaged_files() {
         $fs = get_file_storage();
         $s = $this->staging;
 
         $staging = $fs->get_area_files($s[0], $s[1], $s[2], $s[3]);
         $remaining = [];
-        foreach($staging as $file) {
+        foreach ($staging as $file) {
             if ($file->is_directory()) {
                 continue;
             }
@@ -203,27 +230,27 @@ class bulk_uploader {
         return $remaining;
     }
 
-    function delete_staging_area() {
+    protected function delete_staging_area() {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
         $fs->delete_area_files($contextid, 'local_assignbulk', 'staging');
         $fs->delete_area_files($contextid, 'local_assignbulk', 'submissions');
     }
 
-    function simplify_user_paths($files, $userident) {
+    protected function simplify_user_paths($files, $userident) {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
 
-        // 1. Find the longest common prefix
+        // 1. Find the longest common prefix.
         $prefix = explode('/', trim($files[0]->get_filepath(), '/'));
         $pathlen = count($prefix);
-        $samename = true; // this is for step 2
+        $samename = true; // This is for step 2!
 
         foreach ($files as $file) {
             $path = explode('/', trim($file->get_filepath(), '/'));
             $prefix = array_intersect_assoc($prefix, $path);
             if (empty($prefix)) {
-                break; // No point continuing
+                break; // No point continuing!
             }
             if ($samename &&
                 (($this->effective_file_name($file) != $userident) ||
@@ -246,17 +273,17 @@ class bulk_uploader {
             $pathlen -= count($prefix);
         }
 
-        // 2. If the files are all named the same thing, rename them to their directory's name
+        // 2. If the files are all named the same thing, rename them to their directory's name.
         if (count($files) > 1 && $samename) {
-            // We actually have to quickly iterate to see if there is some path component that differs for all the files
-            // Otherwise we'll end up with name clashes
+            // We actually have to quickly iterate to see if there is some path component that differs for all the files,
+            // otherwise we'll end up with name clashes.
             $pathcomponents = array_fill(0, $pathlen, []);
             foreach ($files as $file) {
                 $path = explode('/', trim($file->get_filepath(), '/'));
                 if (count($path) != $pathlen) {
                     throw new coding_exception('Assertion failure: paths should all be the same length by this point');
                 }
-                for ($i=0; $i < $pathlen; $i++) {
+                for ($i = 0; $i < $pathlen; $i++) {
                     $pathcomponents[$i][] = $path[$i];
                 }
             }
@@ -264,8 +291,8 @@ class bulk_uploader {
             $varindex = -1;
             $commonsuffix = null;
             foreach ($pathcomponents as $i => $comps) {
-                if(count(array_unique($comps)) == count($files)) {
-                    // There is a unique component at this index for ALL files
+                if (count(array_unique($comps)) == count($files)) {
+                    // There is a unique component at this index for ALL files.
                     $varindex = $i;
                     $commonsuffix = true;
                 } else if (($varindex > -1) && (count(array_unique($comps)) > 1)) {
@@ -286,30 +313,30 @@ class bulk_uploader {
         }
     }
 
-    function delete_empty_directories($files, $userid) {
+    protected function delete_empty_directories($files, $userid) {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
 
         $inuse = [];
         foreach ($files as $file) {
             $path = explode('/', rtrim($file->get_filepath(), '/'));
-            while(count($path)) {
+            while (count($path)) {
                 $p = implode('/', $path) . '/';
                 $inuse[$p] = true;
                 array_pop($path);
             }
         }
 
-        $files_and_dirs = $fs->get_area_files($contextid, 'local_assignbulk', 'submissions', $userid);
-        foreach($files_and_dirs as $dir) {
+        $filesanddirs = $fs->get_area_files($contextid, 'local_assignbulk', 'submissions', $userid);
+        foreach ($filesanddirs as $dir) {
             if ($dir->is_directory() && !array_key_exists($dir->get_filepath(), $inuse)) {
-                // not in use, delete
+                // Not in use, delete!
                 $dir->delete();
             }
         }
     }
 
-    function effective_file_name(stored_file $file) {
+    protected function effective_file_name(stored_file $file) {
         if ($file->is_directory()) {
             return basename($file->get_filepath());
         } else {
@@ -318,7 +345,7 @@ class bulk_uploader {
     }
 
     private $_useridents;
-    function user_for_ident($identifier, $throw = true) {
+    public function user_for_ident($identifier, $throw = true) {
         if (!isset($this->_useridents)) {
             $this->_init_useridents();
         }
@@ -344,7 +371,8 @@ class bulk_uploader {
                 continue;
             }
             if (isset($useridents[$user->$ident])) {
-                throw new moodle_exception('identnotunique', 'local_assignbulk', null, ['ident' => $ident, 'value' => $user->$ident]);
+                $a = ['ident' => $ident, 'value' => $user->$ident];
+                throw new moodle_exception('identnotunique', 'local_assignbulk', null, $a);
             }
             $useridents[$user->$ident] = $user;
         }
@@ -364,32 +392,37 @@ class bulk_uploader {
         $userdir->filearea = 'submissions';
 
         if ($file->is_directory()) {
-            // copy every file
+            // Copy every file in the directory.
             $subfiles = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], $file->get_filepath(), true, false);
         } else {
             $subfiles = [$file];
         }
 
         foreach ($subfiles as $file) {
-            // Delete the old file if it exists from a previous failed upload
-            $oldfile = $fs->get_file($userdir->contextid, $userdir->component, $userdir->filearea, $userdir->itemid, $file->get_filepath(), $file->get_filename());
+            // Delete the old file if it exists from a previous failed upload.
+            $oldfile = $fs->get_file($userdir->contextid,
+                                     $userdir->component,
+                                     $userdir->filearea,
+                                     $userdir->itemid,
+                                     $file->get_filepath(),
+                                     $file->get_filename());
             if (!empty($oldfile)) {
                 $oldfile->delete();
             }
             $fs->create_file_from_storedfile($userdir, $file);
-            // Delete the stored file in the staging area
+            // Delete the stored file in the staging area.
             $file->delete();
         }
     }
 
-    function push_files_to_assign($files, $user, $delete = false) {
+    protected function push_files_to_assign($files, $user, $delete = false) {
         global $DB;
 
         $contextid = $this->assign->get_context()->id;
 
         $submissionplugin = $this->assign->get_submission_plugin_by_type('file');
 
-        // assignsubmission_file doesn't have a nice way to do this, so we fake a form submission
+        // Assignsubmission_file doesn't have a nice way to do this, so we fake a form submission.
         $userfb = ['fullname' => fullname($user)];
 
         $formdata = new stdClass;
@@ -398,7 +431,7 @@ class bulk_uploader {
         $mform = new submission_form(null, array($this->assign, $formdata));
         $formdata = $mform->export_values();
 
-        // first create a draftarea with the files we want
+        // First create a draftarea with the files we want.
         $draftitemid = 0;
         file_prepare_draft_area($draftitemid, $contextid, 'local_assignbulk', 'submissions', $user->id, ['subdirs' => true]);
         file_merge_draft_area_into_draft_area($draftitemid, $formdata->files_filemanager);
@@ -413,16 +446,14 @@ class bulk_uploader {
             }
         }
 
-       return $userfb;
+        return $userfb;
     }
 
-    function prepare_draft_area() {
+    public function prepare_draft_area() {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
 
         $draftitemid = file_get_submitted_draft_itemid('submissions');
-        // If we decide to reimplement the bidirectional file thing
-        // file_prepare_draft_area($draftitemid, $context->id, 'local_assignbulk', 'submissions', $cm->id, ['subdirs' => true]);
         if (empty($draftitemid)) {
             $fs->delete_area_files($contextid, 'local_assignbulk', 'staging');
         }
