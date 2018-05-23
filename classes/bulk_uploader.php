@@ -203,6 +203,7 @@ class bulk_uploader {
             } else {
                 // Mock up preview feedback.
                 $feedback[] = ['fullname' => fullname($user),
+                'id' => $user->id,
                 'submissions' => array_map(function($v) {
                     return ['filename' => $v->get_filepath() . $v->get_filename()];
                 }, $files)];
@@ -424,7 +425,7 @@ class bulk_uploader {
         $submissionplugin = $this->assign->get_submission_plugin_by_type('file');
 
         // Assignsubmission_file doesn't have a nice way to do this, so we fake a form submission.
-        $userfb = ['fullname' => fullname($user)];
+        $userfb = ['fullname' => fullname($user), 'id' => $user->id];
 
         $formdata = new stdClass;
         $formdata->userid = $user->id;
