@@ -256,7 +256,16 @@ class bulk_uploader {
 
         foreach ($files as $file) {
             $path = explode('/', trim($file->get_filepath(), '/'));
-            $prefix = array_intersect_assoc($prefix, $path);
+
+            // Find the longest common prefix of the two arrays
+            for ($i=0; $i < count($prefix); $i++) {
+                if ($prefix[$i] == $path[$i]) {
+                    continue;
+                }
+                array_splice($prefix, $i);
+                break;
+            }
+
             if (empty($prefix)) {
                 break; // No point continuing!
             }
@@ -268,7 +277,7 @@ class bulk_uploader {
         }
 
         // If the shortest prefix was /, then $prefix == ['']
-        if (!empty($prefix) && $prefix[0] !== '') {
+        if (!empty($prefix) && $prefix !== ['']) {
             $dropstr = '/' . implode('/', $prefix);
             $droplen = strlen($dropstr);
             foreach ($files as $file) {
