@@ -191,7 +191,7 @@ class bulk_uploader {
 
         // Create a reverse lookup array for idents.
         if (!isset($this->_useridents)) {
-            $this->_init_useridents();
+            $this->_init_useridents(); // @codeCoverageIgnore
         }
 
         $useridentsreverse = [];
@@ -282,7 +282,7 @@ class bulk_uploader {
             $droplen = strlen($dropstr);
             foreach ($files as $file) {
                 if (substr($file->get_filepath(), 0, $droplen) != $dropstr) {
-                    throw new coding_exception('Assertion failure: file path does not begin with prefix string');
+                    throw new coding_exception('Assertion failure: file path does not begin with prefix string'); // @codeCoverageIgnore
                 }
                 $newpath = substr($file->get_filepath(), $droplen);
                 $file->rename($newpath, $file->get_filename());
@@ -299,7 +299,7 @@ class bulk_uploader {
             foreach ($files as $file) {
                 $path = explode('/', trim($file->get_filepath(), '/'));
                 if (count($path) != $pathlen) {
-                    throw new coding_exception('Assertion failure: paths should all be the same length by this point');
+                    throw new coding_exception('Assertion failure: paths should all be the same length by this point'); // @codeCoverageIgnore
                 }
                 for ($i = 0; $i < $pathlen; $i++) {
                     $pathcomponents[$i][] = $path[$i];

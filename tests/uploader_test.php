@@ -27,102 +27,224 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 
 use local_assignbulk\bulk_uploader;
-require_once($CFG->dirroot . '/mod/assign/locallib.php');
+require_once('base.php');
 
 class local_assignbulk_uploader_testcase extends advanced_testcase {
 
-    protected $assign;
+    use local_assignbulk_basic_test;
 
-    protected $course;
+    /**
+     * Tests various file configurations
+     * @param  [type] $fixture       [description]
+     * @param  [type] $ident         [description]
+     * @param  [type] $expectedfiles [description]
+     * @dataProvider top_level_files
+     * @dataProvider deep_level_files
+     * @dataProvider multiple_files
+     * @dataProvider edge_cases
+     */
+    function test_execute($fixture, $ident, $expectedfiles) {
+        $draftitemid = $this->prepareFixture($fixture);
 
-    protected $students;
+        $uploader = new bulk_uploader($this->assign, $ident);
 
-    protected $teacher;
+        $uploader->execute($draftitemid);
 
-    public function setUp() {
-        $this->resetAfterTest();
+        $plugin = $this->assign->get_submission_plugin_by_type('file');
+        foreach ($this->students as $userid => $user) {
+            $expected = $expectedfiles[$user->username];
+            $submission = $this->assign->get_user_submission($userid, false);
+            if ($expected === false) {
+                $this->assertFalse($submission);
+                continue;
+            }
 
-        $this->setAdminUser();
-
-        $this->course = $this->getDataGenerator()->create_course();
-
-        $generator = $this->getDataGenerator()->get_plugin_generator('mod_assign');
-        $assign = $generator->create_instance(array('course' => $this->course->id, 'teamsubmission' => true));
-        $context = context_module::instance($assign->cmid);
-        $this->assign = new assign($context, null, $this->course);
-
-        // Make some users & some groups.
-        for ($i = 0; $i < 20; $i++) {
-            $user = $this->getDataGenerator()->create_user();
-            $this->students[$user->id] = $user;
-            $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
+            $files = $plugin->get_files($submission, $user);
+            $this->assertEquals($expected, array_keys($files), 'File arrays were not equal', 0, 10, true);
         }
-
-        // Make a teacher role.
-        $this->teacher = $this->getDataGenerator()->create_user();
-        $this->getDataGenerator()->enrol_user($this->teacher->id, $this->course->id, 'editingteacher');
-    }
-
-    public function test_user_for_ident_1() {
-        $uploader = new bulk_uploader($this->assign, 'username');
-
-        $usernames = [];
-        foreach ($this->students as $user) {
-            $usernames[] = $user->username;
-        }
-
-        $users = array_map([$uploader, 'user_for_ident'], $usernames);
-
-        $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
-    }
-
-    public function test_user_for_ident_2() {
-        $uploader = new bulk_uploader($this->assign, 'email');
-
-        $emails = [];
-        foreach ($this->students as $user) {
-            $emails[] = $user->email;
-        }
-
-        $users = array_map([$uploader, 'user_for_ident'], $emails);
-
-        $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
-    }
-
-    public function test_user_for_ident_3() {
-        global $DB;
-
-        $uploader = new bulk_uploader($this->assign, 'idnumber');
-
-        $idnumbers = [];
-        foreach ($this->students as $user) {
-            $user->idnumber = "{$user->firstname}{$user->id}";
-            $DB->update_record('user', $user);
-            $idnumbers[] = $user->idnumber;
-        }
-
-        $users = array_map([$uploader, 'user_for_ident'], $idnumbers);
-
-        $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
     }
 
     /**
-     * @expectedException moodle_exception
-     * @expectedExceptionMessage not unique
+     * Tests the preview feature
+     * @param  [type] $fixture       [description]
+     * @param  [type] $ident         [description]
+     * @param  [type] $expectedfiles [description]
+     * @dataProvider top_level_files
+     * @dataProvider deep_level_files
+     * @dataProvider multiple_files
+     * @dataProvider edge_cases
      */
-    public function test_user_for_ident_4() {
-        global $DB;
+    function test_preflight($fixture, $ident, $expectedfiles) {
+        $draftitemid = $this->prepareFixture($fixture);
 
-        $uploader = new bulk_uploader($this->assign, 'idnumber');
+        $uploader = new bulk_uploader($this->assign, $ident);
 
-        $idnumbers = [];
-        foreach ($this->students as $user) {
-            $user->idnumber = $user->id % 10;
-            $DB->update_record('user', $user);
-            $idnumbers[] = $user->idnumber;
+        $feedback = $uploader->execute($draftitemid, false);
+
+        $feedback_by_id = array_column($feedback->users, null, 'id');
+
+        foreach ($this->students as $userid => $user) {
+            // If we don't have an expectation, we don't care
+            if(!isset($expectedfiles[$user->username])) {
+                continue;
+            }
+
+            $expected = $expectedfiles[$user->username];
+            if ($expected === false) {
+                $this->assertArrayNotHasKey($userid, $feedback_by_id);
+                continue;
+            }
+
+            $fb = $feedback_by_id[$userid];
+            $this->assertEquals($expected, array_column($fb['submissions'], 'filename'), 'File arrays were not equal', 0, 10, true);
         }
-
-        $users = array_map([$uploader, 'user_for_ident'], $idnumbers);
     }
+
+    function top_level_files() {
+        $expectedfiles = [
+            'user01' => ['/user01.txt'],
+            'user02' => ['/user02.txt'],
+            'user03' => ['/user03.txt'],
+            'user04' => ['/user04.txt'],
+            'user05' => ['/user05.txt'],
+            'user06' => ['/user06.txt'],
+            'user07' => ['/user07.txt'],
+            'user08' => ['/user08.txt'],
+            'user09' => ['/user09.txt'],
+            'user10' => ['/user10.txt'],
+            'user11' => ['/user11.txt'],
+            'user12' => ['/user12.txt'],
+            'user13' => ['/user13.txt'],
+            'user14' => ['/user14.txt'],
+            'user15' => ['/user15.txt'],
+            'user16' => ['/user16.txt'],
+            'user17' => ['/user17.txt'],
+            'user18' => ['/user18.txt'],
+            'user19' => ['/user19.txt'],
+            'user20' => ['/user20.txt'],
+        ];
+
+        // Set even numbered users to false
+        $somemissing = array_merge($expectedfiles, array_fill_keys(['user02','user04','user06','user08','user10','user12','user14','user16','user18','user20'], false));
+
+        return array_column([
+            ['top_level_files', 'username', $expectedfiles],
+            ['top_level_zip', 'username', $expectedfiles],
+            ['top_level_missing', 'username', $somemissing],
+            ['top_level_missing_zip', 'username', $somemissing],
+            ['top_level_mixed', 'username', $expectedfiles],
+            ['top_level_multizip', 'username', $expectedfiles],
+            ['zipped_top_level_files', 'username', $expectedfiles],
+        ], null, 0);
+    }
+
+    function deep_level_files() {
+        $expectedfiles = [
+            'user01' => ['/submission.txt'],
+            'user02' => ['/submission.txt'],
+            'user03' => ['/submission.txt'],
+            'user04' => ['/submission.txt'],
+            'user05' => ['/submission.txt'],
+            'user06' => ['/submission.txt'],
+            'user07' => ['/submission.txt'],
+            'user08' => ['/submission.txt'],
+            'user09' => ['/submission.txt'],
+            'user10' => ['/submission.txt'],
+            'user11' => ['/submission.txt'],
+            'user12' => ['/submission.txt'],
+            'user13' => ['/submission.txt'],
+            'user14' => ['/submission.txt'],
+            'user15' => ['/submission.txt'],
+            'user16' => ['/submission.txt'],
+            'user17' => ['/submission.txt'],
+            'user18' => ['/submission.txt'],
+            'user19' => ['/submission.txt'],
+            'user20' => ['/submission.txt'],
+        ];
+
+        return array_column([
+            ['deep_folder_per_user', 'username', $expectedfiles],
+            ['zipped_deep_folder_per_user', 'username', $expectedfiles],
+        ], null, 0);
+    }
+
+    function multiple_files() {
+        $usernames = [
+            'user01',
+            'user02',
+            'user03',
+            'user04',
+            'user05',
+            'user06',
+            'user07',
+            'user08',
+            'user09',
+            'user10',
+            'user11',
+            'user12',
+            'user13',
+            'user14',
+            'user15',
+            'user16',
+            'user17',
+            'user18',
+            'user19',
+            'user20'
+        ];
+
+        $expectedfiles = array_fill_keys($usernames, ['/question1.txt', '/question2.txt', '/question3.txt']);
+
+        return array_column([
+            ['multiple_one_per_folder', 'username', $expectedfiles],
+            ['multiple_folder_per_user', 'username', $expectedfiles],
+            ['multiple_deep', 'username', $expectedfiles],
+            ['zipped_multiple_one_per_folder', 'username', $expectedfiles],
+            ['zipped_multiple_folder_per_user', 'username', $expectedfiles],
+        ], null, 0);
+    }
+
+    function edge_cases() {
+        $usernames = [
+            'user01',
+            'user02',
+            'user03',
+            'user04',
+            'user05',
+            'user06',
+            'user07',
+            'user08',
+            'user09',
+            'user10',
+            'user11',
+            'user12',
+            'user13',
+            'user14',
+            'user15',
+            'user16',
+            'user17',
+            'user18',
+            'user19',
+            'user20'
+        ];
+
+        // Zip files are not unpacked if they match a user identifier
+        // This way cumbersome files can be assessed without worrying about if they'll be unzipped by the plugin
+        $expectedzips = array_combine($usernames, array_map (function($v) { return ["/$v.zip"]; }, $usernames));
+
+        // For the case where there are multiple files or folders that could potentially cause clashes in simplifying names,
+        // we simply do nothing. The chance of losing valuable information is too high.
+        $expectedmultifile = array_combine($usernames, array_map (function($v) { return ["/question1/$v/submission.txt", "/question2/$v/submission.txt", "/question3/$v/submission.txt", "/question3/$v/sbmn.txt"]; }, $usernames));
+
+        // Even though this path could potentially be simplified, we leave it alone
+        $expectedmultidir = array_combine($usernames, array_map (function($v) { return ["/question1/$v/response/submission.txt", "/question2/$v/response/submission.txt", "/question3/$v/response/submission.txt", "/question3/$v/rspn/submission.txt"]; }, $usernames));
+
+        return array_column([
+            ['edge_zip_per_user', 'username', $expectedzips],
+            ['edge_multiple_filenames', 'username', $expectedmultifile],
+            ['edge_multiple_folder_names', 'username', $expectedmultidir],
+        ], null, 0);
+    }
+
+    // TODO: Test simplify_user_paths directly
 
 }
