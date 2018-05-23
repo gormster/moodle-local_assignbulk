@@ -259,7 +259,8 @@ class bulk_uploader {
             }
         }
 
-        if (!empty($prefix)) {
+        // If the shortest prefix was /, then $prefix == ['']
+        if (!empty($prefix) && $prefix[0] !== '') {
             $dropstr = '/' . implode('/', $prefix);
             $droplen = strlen($dropstr);
             foreach ($files as $file) {
