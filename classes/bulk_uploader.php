@@ -204,7 +204,7 @@ class bulk_uploader {
                 // Mock up preview feedback.
                 $feedback[] = ['fullname' => fullname($user),
                 'submissions' => array_map(function($v) {
-                    return ['filename' => $v->get_filename()];
+                    return ['filename' => $v->get_filepath() . $v->get_filename()];
                 }, $files)];
             }
         }
@@ -443,7 +443,7 @@ class bulk_uploader {
         } else {
             $userfb['submissions'] = [];
             foreach ($files as $file) {
-                $userfb['submissions'][] = ['filename' => $file->get_filename()];
+                $userfb['submissions'][] = ['filename' => $file->get_filepath() . $file->get_filename()];
             }
         }
 
