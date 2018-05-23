@@ -83,6 +83,13 @@ class bulk_uploader {
 
     }
 
+    /**
+     * Save the files from the draft area to a staging area where we will unpack them
+     * This is part of a two step process that we use simply to avoid messing with the
+     * draft area - if something fails, we want the draft area to be untouched.
+     * @param  int     $draftitemid The draft item ID we received from the upload form
+     * @param  boolean $delete      Unused, for now
+     */
     protected function save_draft_files($draftitemid, $delete = false) {
         global $USER;
 
@@ -298,6 +305,8 @@ class bulk_uploader {
                     $varindex = $i;
                     $commonsuffix = true;
                 } else if (($varindex > -1) && (count(array_unique($comps)) > 1)) {
+                    // Uh oh - some files after the unique component have different names, too
+                    // That means we can't drop the suffix because we'll lose information
                     $commonsuffix = false;
                 }
             }
