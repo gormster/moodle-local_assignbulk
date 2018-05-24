@@ -245,6 +245,11 @@ class bulk_uploader {
         $fs->delete_area_files($contextid, 'local_assignbulk', 'submissions');
     }
 
+    /**
+     * Reduce the path length if possible. Makes things like /submissions.zip/question1/user01.txt into /question1.txt
+     * @param  stored_file[] $files         the files we're trying to simplify
+     * @param  string        $userident     the identifying feature of the user
+     */
     protected function simplify_user_paths($files, $userident) {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;

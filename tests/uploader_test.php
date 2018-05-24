@@ -245,6 +245,77 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         ], null, 0);
     }
 
-    // TODO: Test simplify_user_paths directly
+    /**
+     * Test the file paths
+     * @param  string             $ident      The user identifier
+     * @param  string             $userident  The identifying mark for this user (i.e. $user->$ident)
+     * @param  [[string, string]] $files      Array of 2-tuples of input and expected filenames
+     * @dataProvider user_paths_basic
+     */
+    function test_simplify_user_paths($ident, $userident, $files) {
+        $uploader = new bulk_uploader($this->assign, $ident);
+
+        $fs = get_file_storage();
+
+        $testfiles = [];
+        $expectedresults = [];
+
+        foreach($files as list($file, $expected)) {
+            list($filepath, $filename) = $this->splitname($file);
+
+            $record = new stdClass();
+            $record->contextid = $this->assign->get_context()->id;
+            $record->component = 'local_assignbulk';
+            $record->filearea = 'staging';
+            $record->itemid = file_get_unused_draft_itemid();
+            $record->filepath = $filepath;
+            $record->filename = $filename;
+
+            $storedfile = $fs->create_file_from_string($record, 'This is a test submission file ' . $file . ' for ' . $userident);
+            $expectedresults[$storedfile->get_id()] = $expected;
+            $testfiles[] = $storedfile;
+        }
+
+        phpunit_util::call_internal_method($uploader, 'simplify_user_paths', [$testfiles, $userident], bulk_uploader::class);
+
+        foreach($testfiles as $file) {
+            list($expectedpath, $expectedname) = $this->splitname($expectedresults[$file->get_id()]);
+
+            $this->assertEquals($expectedpath, $file->get_filepath());
+            $this->assertEquals($expectedname, $file->get_filename());
+        }
+    }
+
+    private function splitname($n) {
+        $i = strrpos($n, '/') + 1;
+        return [substr($n, 0, $i), substr($n, $i)];
+    }
+
+    function user_paths_basic() {
+
+        return [
+            // This shouldn't be mangled at all
+            ['username', 'user01', [
+                ['/user01.txt', '/user01.txt']
+            ]],
+            ['username', 'user01', [
+                ['/submission.txt', '/submission.txt']
+            ]],
+            ['username', 'user01', [
+                ['/user01/submission.txt', '/submission.txt']
+            ]],
+            ['username', 'user01', [
+                ['/user01/submission.txt', '/submission.txt'],
+                ['/user01/biblio.txt', '/biblio.txt']
+            ]],
+            ['username', 'user01', [
+                ['/submission/user01.txt', '/submission.txt'],
+                ['/biblio/user01.txt', '/biblio.txt']
+            ]],
+        ];
+
+    }
+
+    // TODO: Failing, warning & notice tests for upload and simplify user paths
 
 }
