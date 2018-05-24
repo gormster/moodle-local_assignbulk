@@ -21,6 +21,7 @@
  * @category  test
  * @copyright 2013 Morgan Harris
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @codeCoverageIgnore
  */
 
 // NOTE: no MOODLE_INTERNAL test here, this file may be required by behat before including /config.php.
@@ -30,7 +31,7 @@ require_once(__DIR__ . '/../../../../lib/behat/behat_base.php');
 use Behat\Behat\Hook\Scope\AfterStepScope;
 use Behat\Testwork\Tester\Result\TestResult;
 
-define('DEBUG',1);
+// define('DEBUG',1);
 
 class behat_local_assignbulk extends behat_base {
 
