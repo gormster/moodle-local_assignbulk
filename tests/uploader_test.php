@@ -17,34 +17,39 @@
 /**
  * Test the uploader
  *
- * @package     local_assignbulk\tests
+ * @package     local_assignbulk
  * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-global $CFG;
-
 use local_assignbulk\bulk_uploader;
 require_once('base.php');
 
+/**
+ * Test the uploader
+ *
+ * @package     local_assignbulk
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class local_assignbulk_uploader_testcase extends advanced_testcase {
 
     use local_assignbulk_basic_test;
 
     /**
      * Tests various file configurations
-     * @param  [type] $fixture       [description]
-     * @param  [type] $ident         [description]
-     * @param  [type] $expectedfiles [description]
+     * @param  string $fixture       The name of the fixture
+     * @param  string $ident         The user identifier field
+     * @param  array  $expectedfiles [$username => [$filepath . $filename]]
      * @dataProvider top_level_files
      * @dataProvider deep_level_files
      * @dataProvider multiple_files
      * @dataProvider edge_cases
      */
-    function test_execute($fixture, $ident, $expectedfiles) {
-        $draftitemid = $this->prepareFixture($fixture);
+    public function test_execute($fixture, $ident, $expectedfiles) {
+        $draftitemid = $this->prepare_fixture($fixture);
 
         $uploader = new bulk_uploader($this->assign, $ident);
 
@@ -66,41 +71,46 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
     /**
      * Tests the preview feature
-     * @param  [type] $fixture       [description]
-     * @param  [type] $ident         [description]
-     * @param  [type] $expectedfiles [description]
+     * @param  string $fixture       The name of the fixture
+     * @param  string $ident         The user identifier field
+     * @param  array  $expectedfiles [$username => [$filepath . $filename]]
      * @dataProvider top_level_files
      * @dataProvider deep_level_files
      * @dataProvider multiple_files
      * @dataProvider edge_cases
      */
-    function test_preflight($fixture, $ident, $expectedfiles) {
-        $draftitemid = $this->prepareFixture($fixture);
+    public function test_preflight($fixture, $ident, $expectedfiles) {
+        $draftitemid = $this->prepare_fixture($fixture);
 
         $uploader = new bulk_uploader($this->assign, $ident);
 
         $feedback = $uploader->execute($draftitemid, false);
 
-        $feedback_by_id = array_column($feedback->users, null, 'id');
+        $userfeedback = array_column($feedback->users, null, 'id');
 
         foreach ($this->students as $userid => $user) {
-            // If we don't have an expectation, we don't care
-            if(!isset($expectedfiles[$user->username])) {
+            // If we don't have an expectation, we don't care.
+            if (!isset($expectedfiles[$user->username])) {
                 continue;
             }
 
             $expected = $expectedfiles[$user->username];
             if ($expected === false) {
-                $this->assertArrayNotHasKey($userid, $feedback_by_id);
+                $this->assertArrayNotHasKey($userid, $userfeedback);
                 continue;
             }
 
-            $fb = $feedback_by_id[$userid];
+            $fb = $userfeedback[$userid];
             $this->assertEquals($expected, array_column($fb['submissions'], 'filename'), 'File arrays were not equal', 0, 10, true);
         }
     }
 
-    function top_level_files() {
+    /**
+     * Non-nested file tests
+     * @see local_assignbulk_uploader_testcase::test_execute
+     * @return array
+     */
+    public function top_level_files() {
         $expectedfiles = [
             'user01' => ['/user01.txt'],
             'user02' => ['/user02.txt'],
@@ -125,7 +135,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         ];
 
         // Set even numbered users to false
-        $somemissing = array_merge($expectedfiles, array_fill_keys(['user02','user04','user06','user08','user10','user12','user14','user16','user18','user20'], false));
+        $somemissing = array_merge($expectedfiles, array_fill_keys(['user02', 'user04', 'user06', 'user08', 'user10', 'user12', 'user14', 'user16', 'user18', 'user20'], false));
 
         return array_column([
             ['top_level_files', 'username', $expectedfiles],
@@ -138,7 +148,12 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         ], null, 0);
     }
 
-    function deep_level_files() {
+    /**
+     * Nested file tests
+     * @see local_assignbulk_uploader_testcase::test_execute
+     * @return array
+     */
+    public function deep_level_files() {
         $expectedfiles = [
             'user01' => ['/submission.txt'],
             'user02' => ['/submission.txt'],
@@ -168,7 +183,12 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         ], null, 0);
     }
 
-    function multiple_files() {
+    /**
+     * File tests with multiple files per submission
+     * @see local_assignbulk_uploader_testcase::test_execute
+     * @return array
+     */
+    public function multiple_files() {
         $usernames = [
             'user01',
             'user02',
@@ -203,7 +223,12 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         ], null, 0);
     }
 
-    function edge_cases() {
+    /**
+     * Miscellaneous edge case files - ambiguous names, etc
+     * @see local_assignbulk_uploader_testcase::test_execute
+     * @return array
+     */
+    public function edge_cases() {
         $usernames = [
             'user01',
             'user02',
@@ -233,10 +258,18 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
         // For the case where there are multiple files or folders that could potentially cause clashes in simplifying names,
         // we simply do nothing. The chance of losing valuable information is too high.
-        $expectedmultifile = array_combine($usernames, array_map (function($v) { return ["/question1/$v/submission.txt", "/question2/$v/submission.txt", "/question3/$v/submission.txt", "/question3/$v/sbmn.txt"]; }, $usernames));
+        $expectedmultifile = array_combine($usernames, array_map (function($v) { return [
+            "/question1/$v/submission.txt",
+            "/question2/$v/submission.txt",
+            "/question3/$v/submission.txt",
+            "/question3/$v/sbmn.txt"]; }, $usernames));
 
         // Even though this path could potentially be simplified, we leave it alone
-        $expectedmultidir = array_combine($usernames, array_map (function($v) { return ["/question1/$v/response/submission.txt", "/question2/$v/response/submission.txt", "/question3/$v/response/submission.txt", "/question3/$v/rspn/submission.txt"]; }, $usernames));
+        $expectedmultidir = array_combine($usernames, array_map (function($v) { return [
+            "/question1/$v/response/submission.txt",
+            "/question2/$v/response/submission.txt",
+            "/question3/$v/response/submission.txt",
+            "/question3/$v/rspn/submission.txt"]; }, $usernames));
 
         return array_column([
             ['edge_zip_per_user', 'username', $expectedzips],
@@ -247,12 +280,12 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
     /**
      * Test the file paths
-     * @param  string             $ident      The user identifier
-     * @param  string             $userident  The identifying mark for this user (i.e. $user->$ident)
-     * @param  [[string, string]] $files      Array of 2-tuples of input and expected filenames
+     * @param  string  $ident      The user identifier
+     * @param  string  $userident  The identifying mark for this user (i.e. $user->$ident)
+     * @param  array   $files      Array of 2-tuples of input and expected filenames
      * @dataProvider user_paths_basic
      */
-    function test_simplify_user_paths($ident, $userident, $files) {
+    public function test_simplify_user_paths($ident, $userident, $files) {
         $uploader = new bulk_uploader($this->assign, $ident);
 
         $fs = get_file_storage();
@@ -260,7 +293,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         $testfiles = [];
         $expectedresults = [];
 
-        foreach($files as list($file, $expected)) {
+        foreach ($files as list($file, $expected)) {
             list($filepath, $filename) = $this->splitname($file);
 
             $record = new stdClass();
@@ -278,7 +311,7 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
         phpunit_util::call_internal_method($uploader, 'simplify_user_paths', [$testfiles, $userident], bulk_uploader::class);
 
-        foreach($testfiles as $file) {
+        foreach ($testfiles as $file) {
             list($expectedpath, $expectedname) = $this->splitname($expectedresults[$file->get_id()]);
 
             $this->assertEquals($expectedpath, $file->get_filepath());
@@ -286,15 +319,25 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
         }
     }
 
+    /**
+     * Convenience function for splitting a path into filepath and filename
+     * How is this not a moodle provided function?
+     * @param  string $n   The full file path
+     * @return string[]    ($filepath, $filename)
+     */
     private function splitname($n) {
         $i = strrpos($n, '/') + 1;
         return [substr($n, 0, $i), substr($n, $i)];
     }
 
-    function user_paths_basic() {
+    /**
+     * Some basic user path simplification tests
+     * @see local_assignbulk_uploader_testcase::test_simplify_user_paths
+     * @return array
+     */
+    public function user_paths_basic() {
 
         return [
-            // This shouldn't be mangled at all
             ['username', 'user01', [
                 ['/user01.txt', '/user01.txt']
             ]],
@@ -316,6 +359,6 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
     }
 
-    // TODO: Failing, warning & notice tests for upload and simplify user paths
+    // TODO: Failing, warning & notice tests for upload and simplify user paths.
 
 }

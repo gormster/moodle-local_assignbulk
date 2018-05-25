@@ -14,8 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+/**
+ * Moodle hooks for the assignbulk plugin.
+ *
+ * @package     local_assignbulk
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 defined('MOODLE_INTERNAL') || die;
 
+/**
+ * Add the bulk upload option to assignment if the user has the correct permissions.
+ * @see  settings_navigation::load_local_plugin_settings()
+ * @param  settings_navigation $nav
+ * @param  context             $context
+ */
 function local_assignbulk_extend_settings_navigation(settings_navigation $nav, context $context) {
 
     if (!($context instanceof context_module)) {

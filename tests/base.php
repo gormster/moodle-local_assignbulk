@@ -17,7 +17,7 @@
 /**
  * Basic uploader testing traits
  *
- * @package     local_assignbulk\tests
+ * @package     local_assignbulk
  * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -29,6 +29,10 @@ global $CFG;
 use local_assignbulk\bulk_uploader;
 require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
+/**
+ * Useful tools for tests. This isn't a subclass of advanced_testcase because that would cause the tester to complain there
+ * are no tests in it, and we don't want to waste time performing unnecessary tests.
+ */
 trait local_assignbulk_basic_test {
 
     protected $assign;
@@ -39,7 +43,11 @@ trait local_assignbulk_basic_test {
 
     protected $teacher;
 
-    public function setUp() {
+    /**
+     * Set up the test environment
+     * @see \PHPUnit\Framework\TestCase::setUp
+     */
+    protected function setUp() {
         $this->resetAfterTest();
 
         $this->setAdminUser();
@@ -68,14 +76,26 @@ trait local_assignbulk_basic_test {
         $this->getDataGenerator()->enrol_user($this->teacher->id, $this->course->id, 'editingteacher');
     }
 
-    protected function prepareFixture($fixture) {
+    /**
+     * Create a draft area with the contents of this folder from the tests/fixtures directory
+     * You must call this as the same user you will be testing as; draft areas are scoped to the user
+     * @param  string $fixture  The name of the fixture directory
+     * @return int              A draft item ID for the draft area
+     */
+    protected function prepare_fixture($fixture) {
         $uploader = new bulk_uploader($this->assign, 'username');
         $draftitemid = $uploader->prepare_draft_area();
-        $this->installFixture($fixture, $draftitemid);
+        $this->install_fixture($fixture, $draftitemid);
         return $draftitemid;
     }
 
-    protected function installFixture($fixture, $draftitemid) {
+    /**
+     * Copy files from the given fixture folder to the given draft area
+     * @see local_assignbulk_basic_test::prepare_fixture()
+     * @param  string $fixture     The name of the fixture directory
+     * @param  int    $draftitemid A draft item ID for the draft area (already created)
+     */
+    protected function install_fixture($fixture, $draftitemid) {
         global $USER;
 
         $usercontext = context_user::instance($USER->id);

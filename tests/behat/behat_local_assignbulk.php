@@ -33,6 +33,13 @@ use Behat\Testwork\Tester\Result\TestResult;
 
 // define('DEBUG',1);
 
+/**
+ * Steps definitions for assign bulk upload plugin.
+ *
+ * @package   local_assignbulk
+ * @copyright 2013 Morgan Harris
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class behat_local_assignbulk extends behat_base {
 
     /**

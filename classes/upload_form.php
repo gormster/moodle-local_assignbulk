@@ -28,8 +28,18 @@ defined('MOODLE_INTERNAL') || die;
 
 use assign;
 
+/**
+ * The form for uploading one lot of assignment submissions.
+ *
+ * @package     local_assignbulk
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class upload_form extends \moodleform {
 
+    /**
+     * Form definition
+     */
     public function definition() {
         global $CFG;
 

@@ -34,25 +34,74 @@ use moodle_url;
 
 defined('MOODLE_INTERNAL') or die();
 
+/**
+ * Handles the work of uploading one lot of assignment submissions.
+ *
+ * The uploader class does the work of uploading one lot of assignment submissions.
+ * It handles this through the public execute() function, which takes care of both
+ * preflight and committing uploads.
+ *
+ * It also contains some convenient functions useful outside of the upload process,
+ * such as preparing a draft area for upload.
+ *
+ * @package     local_assignbulk
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class bulk_uploader {
 
+    /**
+     * The assignment we're going to submit to
+     * @var assign
+     */
     private $assign;
 
+    /**
+     * The identifying field in the user record with which we match filenames
+     * @var string
+     */
     private $ident;
 
+    /**
+     * A convenient container for our staging file area's identifying fields
+     * @var array [$contextid, 'local_assignbulk', 'staging', $itemid]
+     */
     private $staging;
 
+    /**
+     * A return URL to pass to any errors we might throw
+     * @var moodle_url
+     */
     private $errorurl;
 
+    /**
+     * Should the current execution operation actually send the files to the assignment?
+     * If false, this is effectively a dry run - no files will be submitted.
+     * @var boolean
+     */
     private $commit;
 
-    public function __construct($assign, $ident) {
+    /**
+     * Constructor.
+     * @param assign $assign Assignment instance
+     * @param string $ident  The identifying mark for a user; the field in a user record which
+     *                       should be used to identify submission files.
+     */
+    public function __construct(assign $assign, $ident) {
         $this->assign = $assign;
         $this->ident = $ident;
         $id = $assign->get_course_module()->id;
         $this->errorurl = new moodle_url('local/assignbulk/upload.php', ['id' => $id]);
     }
 
+    /**
+     * Copy files from a given draft area to their matching assignment submissions.
+     * @param  int     $draftitemid The itemid of a draft area which contains the files to be uploaded
+     * @param  boolean $commit      If false, do a dry run without actually committing the files to the submissions
+     * @return stdClass             An object contaning the following fields:
+     *                                 users: array[] An array of arrays with keys fullname, id, notices (string[]) and submissions (array[])
+     *                                 warnings: string[] The paths of files that weren't matched to any user
+     */
     public function execute($draftitemid, $commit = true) {
 
         $feedback = new stdClass();
@@ -114,6 +163,10 @@ class bulk_uploader {
         $this->staging = [$change->contextid, $change->component, $change->filearea, $draftitemid];
     }
 
+    /**
+     * Extract any zip files at the top level that do NOT match a valid user identifier. This
+     * only works at the top level; nested zip files are not extracted.
+     */
     protected function unzip_top_level_files() {
         $fs = get_file_storage();
         $s = $this->staging;
@@ -150,6 +203,12 @@ class bulk_uploader {
         }
     }
 
+    /**
+     * A single step in walking the tree of the staging area. Calls itself recursively for all the subdirectories.
+     * Copies the files it finds to the user's directory in the submissions area (but doesn't actually submit them yet)
+     * Breadth first! Files in higher directories get priority over files in lower directories.
+     * @param  string $directory The path of the directory to walk over
+     */
     protected function walk_step($directory) {
         $fs = get_file_storage();
         $s = $this->staging;
@@ -175,6 +234,11 @@ class bulk_uploader {
         }
     }
 
+    /**
+     * Submits the files from the user directories in the submissions area to the assignment.
+     * Or it pretends to, if execute() was called with $commit == false.
+     * @return array The user-specific described in {@link bulk_uploader::execute()}
+     */
     protected function submit_user_files() {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
@@ -221,6 +285,11 @@ class bulk_uploader {
 
     }
 
+    /**
+     * After we've submitted all the user files, any files left in the staging area have not been submitted.
+     * We use this function to warn the user that they weren't processed (maybe the name is mis-spelled).
+     * @return array The warnings described in {@link bulk_uploader::execute()}
+     */
     protected function remaining_unstaged_files() {
         $fs = get_file_storage();
         $s = $this->staging;
@@ -238,6 +307,9 @@ class bulk_uploader {
         return $remaining;
     }
 
+    /**
+     * Be good citizens - delete our files after we're no longer using them
+     */
     protected function delete_staging_area() {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
@@ -262,8 +334,8 @@ class bulk_uploader {
         foreach ($files as $file) {
             $path = explode('/', trim($file->get_filepath(), '/'));
 
-            // Find the longest common prefix of the two arrays
-            for ($i=0; $i < count($prefix); $i++) {
+            // Find the longest common prefix of the two arrays, and slice off $prefix at the point where they differ.
+            for ($i = 0; $i < count($prefix); $i++) {
                 if ($prefix[$i] == $path[$i]) {
                     continue;
                 }
@@ -281,7 +353,7 @@ class bulk_uploader {
             }
         }
 
-        // If the shortest prefix was /, then $prefix == ['']
+        // If the shortest prefix was /, then $prefix == [''].
         if (!empty($prefix) && $prefix !== ['']) {
             $dropstr = '/' . implode('/', $prefix);
             $droplen = strlen($dropstr);
@@ -319,8 +391,8 @@ class bulk_uploader {
                     $varindex = $i;
                     $commonsuffix = true;
                 } else if (($varindex > -1) && (count(array_unique($comps)) > 1)) {
-                    // Uh oh - some files after the unique component have different names, too
-                    // That means we can't drop the suffix because we'll lose information
+                    // Uh oh - some files after the unique component have different names, too!
+                    // That means we can't drop the suffix because we risk losing information.
                     $commonsuffix = false;
                 }
             }
@@ -338,6 +410,13 @@ class bulk_uploader {
         }
     }
 
+    /**
+     * We don't want to submit empty directories to the assignment, so remove any that might have been left over after
+     * simplifying the user paths. We don't do this at the same time as simplify_user_paths because that function is complex
+     * enough already.
+     * @param  stored_file[] $files  The files that are being submitted for this user
+     * @param  int           $userid The user id
+     */
     protected function delete_empty_directories($files, $userid) {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
@@ -361,6 +440,12 @@ class bulk_uploader {
         }
     }
 
+    /**
+     * Submissions can be regular files or directories; we compare the name of the directory or the name of the file without
+     * extension to the user identifier to determine whether or not this is a valid submission file.
+     * @param  stored_file $file [description]
+     * @return [type]            [description]
+     */
     protected function effective_file_name(stored_file $file) {
         if ($file->is_directory()) {
             return basename($file->get_filepath());
@@ -369,7 +454,18 @@ class bulk_uploader {
         }
     }
 
+    /**
+     * Cache of user identifiers
+     * @var string => stdClass  User identifier to user object
+     */
     private $_useridents;
+
+    /**
+     * Return the user for this identifier
+     * @param  string  $identifier The user identifier (i.e. $user->$ident)
+     * @param  boolean $throw      If true, throws if no user is found by this name, otherwise return null
+     * @return stdClass|null       The user object, or null if the user wasn't found
+     */
     public function user_for_ident($identifier, $throw = true) {
         if (!isset($this->_useridents)) {
             $this->_init_useridents();
@@ -379,13 +475,16 @@ class bulk_uploader {
             return $this->_useridents[$identifier];
         } else {
             if ($throw) {
-                throw new moodle_exception('invaliduser', 'local_assignbulk', null, $identifier);
+                throw new moodle_exception('invaliduser', 'local_assignbulk', $this->errorurl, $identifier);
             }
         }
 
         return null;
     }
 
+    /**
+     * Initialise the user identifier cache
+     */
     private function _init_useridents() {
         $ident = $this->ident;
         $useridents = [];
@@ -397,7 +496,7 @@ class bulk_uploader {
             }
             if (isset($useridents[$user->$ident])) {
                 $a = ['ident' => $ident, 'value' => $user->$ident];
-                throw new moodle_exception('identnotunique', 'local_assignbulk', null, $a);
+                throw new moodle_exception('identnotunique', 'local_assignbulk', $this->errorurl, $a);
             }
             $useridents[$user->$ident] = $user;
         }
@@ -405,6 +504,12 @@ class bulk_uploader {
         $this->_useridents = $useridents;
     }
 
+    /**
+     * Move the file from the staging area to the user-specific submission area.
+     * As much as this function is called "copy", it deletes the file from the original area; it's more of a move...
+     * @param  stored_file $file The file to move
+     * @param  stdClass    $user The user object to move the file to. Only $id is actually needed, though.
+     */
     private function copy_to_userdir(stored_file $file, $user) {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
@@ -440,6 +545,18 @@ class bulk_uploader {
         }
     }
 
+    /**
+     * Add the files as a user submission to this assignment.
+     * This works by creating a submission form, extracting the form data by way of a public method to access the private data,
+     * then submitting that form to the assignment. From the assignment's perspective, this is identical to the user themselves
+     * creating a submission using the normal web interface.
+     *
+     * @uses \local_assignbulk\upload_form
+     * @param  stored_file[]  $files  The files to submit on behalf of the user
+     * @param  stdClass       $user   The user to submit on behalf of
+     * @param  boolean        $delete Unused, for now
+     * @return array          A single entry in the users feedback described in {@link bulk_uploader::execute()}
+     */
     protected function push_files_to_assign($files, $user, $delete = false) {
         global $DB;
 
@@ -474,6 +591,10 @@ class bulk_uploader {
         return $userfb;
     }
 
+    /**
+     * Convenience function to prepare a draft area for uploading submission files to.
+     * @return int  The draft item id that should be passed to the upload form and also to {@link bulk_uploader::execute()}
+     */
     public function prepare_draft_area() {
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;

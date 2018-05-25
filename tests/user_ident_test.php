@@ -17,22 +17,30 @@
 /**
  * Test the uploader
  *
- * @package     local_assignbulk\tests
+ * @package     local_assignbulk
  * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-global $CFG;
-
 use local_assignbulk\bulk_uploader;
 require_once('base.php');
 
+/**
+ * Test the uploader
+ *
+ * @package     local_assignbulk
+ * @copyright   2017 Morgan Harris <morgan.harris@unsw.edu.au>
+ * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class local_assignbulk_user_ident_testcase extends advanced_testcase {
 
     use local_assignbulk_basic_test;
 
+    /**
+     * Get the correct users for their usernames
+     */
     public function test_user_for_ident_1() {
         $uploader = new bulk_uploader($this->assign, 'username');
 
@@ -46,6 +54,9 @@ class local_assignbulk_user_ident_testcase extends advanced_testcase {
         $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
     }
 
+    /**
+     * Get the correct users for their emails
+     */
     public function test_user_for_ident_2() {
         $uploader = new bulk_uploader($this->assign, 'email');
 
@@ -59,6 +70,9 @@ class local_assignbulk_user_ident_testcase extends advanced_testcase {
         $this->assertEquals(array_values($this->students), array_values($users), "Some users did not match up again");
     }
 
+    /**
+     * Get the correct users for their idnumbers
+     */
     public function test_user_for_ident_3() {
         global $DB;
 
@@ -75,6 +89,7 @@ class local_assignbulk_user_ident_testcase extends advanced_testcase {
     }
 
     /**
+     * Fail on non-unique idnumbers
      * @expectedException moodle_exception
      * @expectedExceptionMessage not unique
      */
@@ -94,6 +109,7 @@ class local_assignbulk_user_ident_testcase extends advanced_testcase {
     }
 
     /**
+     * Fail on non-existent username
      * @expectedException moodle_exception
      * @expectedExceptionMessage not a submitter
      */
