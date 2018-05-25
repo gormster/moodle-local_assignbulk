@@ -36,26 +36,18 @@ use Behat\Testwork\Tester\Result\TestResult;
 class behat_local_assignbulk extends behat_base {
 
     /**
+     * Allow debugging of behat tests by PAUSING on failure.
+     * Uncomment the DEBUG define above to use it. This should really be a built in part of Behat IMO...
      * @AfterStep
      *
      * @param AfterStepScope $scope
      */
-    public function waitToDebugInBrowserOnStepErrorHook(AfterStepScope $scope)
-    {
+    public function waitToDebugInBrowserOnStepErrorHook(AfterStepScope $scope) {
         if (defined('DEBUG')) {
             if ($scope->getTestResult()->getResultCode() == TestResult::FAILED) {
-                $js = <<<JS
-                window.__BEHAT__WAIT = false;
-                var btn = document.createElement("button");
-                btn.textContent = "Continue";
-                btn.style =  "position: fixed; bottom: 10px; right: 10px;";
-                btn.addEventListener('click',function() { window.__BEHAT__WAIT = true; btn.remove(); });
-                document.body.appendChild(btn);
-JS;
-                fwrite(STDOUT,PHP_EOL . "PAUSING ON FAILURE" . PHP_EOL);
+                fwrite(STDOUT, PHP_EOL . "\x07PAUSING ON FAILURE - Press any key to continue" . PHP_EOL);
                 fflush(STDOUT);
-                $this->getSession()->executeScript($js);
-                $this->getSession()->wait(10000000000, 'window.__BEHAT__WAIT');
+                $anything = fread(STDIN, 1);
             }
         }
     }
