@@ -70,7 +70,7 @@ if ($data = $mform->get_data()) {
 
     echo $OUTPUT->render_from_template('local_assignbulk/complete', $feedback);
 
-    if (empty($feedback->warnings)) {
+    if ($commit && empty($feedback->warnings)) {
         $showform = false;
         $continue = new moodle_url('/mod/assign/view.php', ['id' => $id, 'action' => 'grading']);
         echo $OUTPUT->continue_button($continue);
