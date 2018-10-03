@@ -447,11 +447,8 @@ class bulk_uploader {
      * @return [type]            [description]
      */
     protected function effective_file_name(stored_file $file) {
-        if ($file->is_directory()) {
-            return basename($file->get_filepath());
-        } else {
-            return pathinfo($file->get_filename(), PATHINFO_FILENAME);
-        }
+        $filename = $file->is_directory() ? basename($file->get_filepath()) : $file->get_filename();
+        return pathinfo($filename, PATHINFO_FILENAME);
     }
 
     /**
