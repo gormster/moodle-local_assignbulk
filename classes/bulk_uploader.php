@@ -571,6 +571,7 @@ class bulk_uploader {
         $formdata->userid = $user->id;
 
         $mform = new submission_form(null, array($this->assign, $formdata));
+
         $formdata = $mform->export_values();
 
         // First create a draftarea with the files we want.

@@ -49,4 +49,8 @@ class submission_form extends \mod_assign_submission_form {
         return (object)$this->_form->exportValues();
     }
 
+    public function get_errors() {
+        return $this->_form->_errors;
+    }
+
 }
