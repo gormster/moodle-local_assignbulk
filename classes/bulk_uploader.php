@@ -32,6 +32,11 @@ use stored_file;
 use stdClass;
 use moodle_url;
 
+use \assignfeedback_editpdf\document_services;
+use \assignfeedback_editpdf\combined_document;
+use \assignfeedback_editpdf\pdf;
+use \core_files\conversion;
+
 defined('MOODLE_INTERNAL') or die();
 
 /**
@@ -561,6 +566,15 @@ class bulk_uploader {
 
         $submissionplugin = $this->assign->get_submission_plugin_by_type('file');
 
+        // Search for .rawImages directories
+        $rawimages = [];
+        foreach ($files as $i => $file) {
+            if ($filepath = $this->is_raw_images($file)) {
+                $rawimages[$filepath] = $file;
+                unset($files[$i]);
+            }
+        }
+
         // Assignsubmission_file doesn't have a nice way to do this, so we fake a form submission.
         $userfb = ['fullname' => fullname($user), 'id' => $user->id];
 
@@ -576,6 +590,15 @@ class bulk_uploader {
         file_merge_draft_area_into_draft_area($draftitemid, $formdata->files_filemanager);
 
         $this->assign->save_submission((object)$formdata, $notices);
+
+        if (!empty($rawimages)) {
+            $editpdf = $this->assign->get_feedback_plugin_by_type('editpdf');
+            if (!is_null($editpdf)) {
+                $submission = $this->assign->get_user_submission($userid, true);
+                $combineddocument = document_services::get_combined_pdf_for_attempt($this->assign, $user->id, -1);
+            }
+        }
+
         if (!empty($notices)) {
             $userfb['notices'] = $notices;
         } else {
@@ -586,6 +609,63 @@ class bulk_uploader {
         }
 
         return $userfb;
+    }
+
+    private function is_raw_images(stored_file $file) {
+        if ($file->is_directory()) {
+            $pathinfo = pathinfo($file->get_filepath());
+            if ($pathinfo['extension'] == "rawImages") {
+                return $pathinfo['dirname'] . '/' . $pathinfo['filename'];
+            }
+        }
+        return false;
+    }
+
+    private function handle_raw_images(combined_document $document, $rawimages) {
+        $pagenumber = 0;
+        $fs = get_file_storage();
+        $contextid = $this->assign->get_context()->id;
+
+        $record = new \stdClass();
+        $record->contextid = $contextid;
+        $record->component = 'assignfeedback_editpdf';
+        $record->filearea = document_services::PAGE_IMAGE_FILEAREA;
+        $record->itemid = $document->get_combined_file()->get_itemid();
+        $record->filepath = '/';
+
+        foreach ($document->get_source_files() as $file) {
+            if ($file instanceof conversion) {
+                $sourcefile = $file->get_sourcefile();
+                $destfile = $file->get_destfile();
+            } else if ($file instanceof stored_file) {
+                $sourcefile = $destfile = $file;
+            }
+
+            $filename = $sourcefile->get_filepath() . $sourcefile->get_filename();
+            if (isset($rawimages[$filename])) {
+                $rawdir = $rawimages[$filename];
+                $compatiblepdf = pdf::ensure_pdf_compatible($file->get_destfile());
+                if ($compatiblepdf) {
+                    $numpages = $pdf->load_pdf($compatiblepdf);
+                    for($i = 0; $i < $numpages; $i++) {
+                        $rawfilename = "image_page$i.png";
+                        $rawfile = $fs->get_file(
+                            $rawdir->get_contextid(),
+                            $rawdir->get_component(),
+                            $rawdir->get_filearea(),
+                            $rawdir->get_itemid(),
+                            $rawdir->get_filepath(),
+                            $rawfilename
+                        );
+                        if ($rawfile) {
+                            $record->filename = 'image_page' . $pagenumber + $i . '.png';
+                            $fs->create_file_from_storedfile($record, $rawfile);
+                        }
+                    }
+                    $pagenumber += $numpages;
+                }
+            }
+        }
     }
 
     /**
