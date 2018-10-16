@@ -87,6 +87,20 @@ class bulk_uploader {
     private $commit;
 
     /**
+     * The pre-rendered images for PDF-compatible files. Keyed by the ORIGINAL file location
+     * (after unzip_top_level_files).
+     * @var [string filepath => => stored_file rendered_page_dir]
+     */
+    private $rawimages;
+
+    /**
+     * Since rawimages is keyed by the original file path, we need to keep track of those.
+     * @var [string filepath => string contenthash]
+     */
+    private $filepaths;
+
+
+    /**
      * Constructor.
      * @param assign $assign Assignment instance
      * @param string $ident  The identifying mark for a user; the field in a user record which
@@ -97,6 +111,7 @@ class bulk_uploader {
         $this->ident = $ident;
         $id = $assign->get_course_module()->id;
         $this->errorurl = new moodle_url('local/assignbulk/upload.php', ['id' => $id]);
+        $this->rawimages = [];
     }
 
     /**
@@ -222,9 +237,18 @@ class bulk_uploader {
         $subpaths = [];
 
         foreach ($files as $file) {
+            if ($filepath = $this->is_raw_images($file)) {
+                if ($file->is_directory()) {
+                    $this->rawimages[$filepath] = $file;
+                }
+                continue;
+            }
+
             $filename = $this->effective_file_name($file);
+
             $user = $this->user_for_ident($filename, false);
             if (!empty($user)) {
+                $this->filepaths[$file->get_contenthash()] = $file->get_filepath() . $file->get_filename();
                 $this->copy_to_userdir($file, $user);
                 continue;
             }
@@ -274,15 +298,17 @@ class bulk_uploader {
             $user = $this->user_for_ident($userident);
             $this->simplify_user_paths($files, $userident);
             $this->delete_empty_directories($files, $userid);
+
             if ($this->commit) {
                 $feedback[] = $this->push_files_to_assign($files, $user);
             } else {
                 // Mock up preview feedback.
-                $feedback[] = ['fullname' => fullname($user),
-                'id' => $user->id,
-                'submissions' => array_map(function($v) {
-                    return ['filename' => $v->get_filepath() . $v->get_filename()];
-                }, $files)];
+                $submissions = [];
+                foreach ($files as $file) {
+                    $filename = $this->filepaths[$file->get_contenthash()];
+                    $submissions[] = ['filename' => $file->get_filepath() . $file->get_filename(), 'rawImages' => array_key_exists($filename, $this->rawimages)];
+                }
+                $feedback[] = ['fullname' => fullname($user), 'id' => $user->id, 'submissions' => $submissions];
             }
         }
 
@@ -303,6 +329,9 @@ class bulk_uploader {
         $remaining = [];
         foreach ($staging as $file) {
             if ($file->is_directory()) {
+                continue;
+            }
+            if ($this->is_raw_images($file)) {
                 continue;
             }
 
@@ -566,15 +595,6 @@ class bulk_uploader {
 
         $submissionplugin = $this->assign->get_submission_plugin_by_type('file');
 
-        // Search for .rawImages directories
-        $rawimages = [];
-        foreach ($files as $i => $file) {
-            if ($filepath = $this->is_raw_images($file)) {
-                $rawimages[$filepath] = $file;
-                unset($files[$i]);
-            }
-        }
-
         // Assignsubmission_file doesn't have a nice way to do this, so we fake a form submission.
         $userfb = ['fullname' => fullname($user), 'id' => $user->id];
 
@@ -591,11 +611,12 @@ class bulk_uploader {
 
         $this->assign->save_submission((object)$formdata, $notices);
 
-        if (!empty($rawimages)) {
+        // Add the raw images
+        if (!empty($this->rawimages)) {
             $editpdf = $this->assign->get_feedback_plugin_by_type('editpdf');
             if (!is_null($editpdf)) {
-                $submission = $this->assign->get_user_submission($userid, true);
-                $combineddocument = document_services::get_combined_pdf_for_attempt($this->assign, $user->id, -1);
+                $submission = $this->assign->get_user_submission($user->id, false, -1);
+                $this->handle_raw_images($submission);
             }
         }
 
@@ -612,19 +633,23 @@ class bulk_uploader {
     }
 
     private function is_raw_images(stored_file $file) {
-        if ($file->is_directory()) {
-            $pathinfo = pathinfo($file->get_filepath());
-            if ($pathinfo['extension'] == "rawImages") {
+        $pathinfo = pathinfo($file->get_filepath());
+        if (array_key_exists('extension', $pathinfo) && ($pathinfo['extension'] == "rawImages")) {
+            if ($pathinfo['dirname'] == '/') {
+                return '/' . $pathinfo['filename'];
+            } else {
                 return $pathinfo['dirname'] . '/' . $pathinfo['filename'];
             }
         }
         return false;
     }
 
-    private function handle_raw_images(combined_document $document, $rawimages) {
+    private function handle_raw_images($submission) {
         $pagenumber = 0;
         $fs = get_file_storage();
         $contextid = $this->assign->get_context()->id;
+
+        $document = document_services::get_combined_pdf_for_attempt($this->assign, $submission->userid, -1);
 
         $record = new \stdClass();
         $record->contextid = $contextid;
@@ -632,6 +657,7 @@ class bulk_uploader {
         $record->filearea = document_services::PAGE_IMAGE_FILEAREA;
         $record->itemid = $document->get_combined_file()->get_itemid();
         $record->filepath = '/';
+        $record->timemodified = $submission->timemodified;
 
         foreach ($document->get_source_files() as $file) {
             if ($file instanceof conversion) {
@@ -641,11 +667,12 @@ class bulk_uploader {
                 $sourcefile = $destfile = $file;
             }
 
-            $filename = $sourcefile->get_filepath() . $sourcefile->get_filename();
-            if (isset($rawimages[$filename])) {
-                $rawdir = $rawimages[$filename];
-                $compatiblepdf = pdf::ensure_pdf_compatible($file->get_destfile());
+            $filename = $this->filepaths[$sourcefile->get_contenthash()];
+            if (isset($this->rawimages[$filename])) {
+                $rawdir = $this->rawimages[$filename];
+                $compatiblepdf = pdf::ensure_pdf_compatible($destfile);
                 if ($compatiblepdf) {
+                    $pdf = new pdf();
                     $numpages = $pdf->load_pdf($compatiblepdf);
                     for($i = 0; $i < $numpages; $i++) {
                         $rawfilename = "image_page$i.png";
@@ -657,8 +684,12 @@ class bulk_uploader {
                             $rawdir->get_filepath(),
                             $rawfilename
                         );
+
                         if ($rawfile) {
-                            $record->filename = 'image_page' . $pagenumber + $i . '.png';
+                            $record->filename = 'image_page' . ($pagenumber + $i) . '.png';
+                            if ($oldfile = $fs->get_file($record->contextid, $record->component, $record->filearea, $record->itemid, $record->filepath, $record->filename)) {
+                                $oldfile->delete();
+                            }
                             $fs->create_file_from_storedfile($record, $rawfile);
                         }
                     }
