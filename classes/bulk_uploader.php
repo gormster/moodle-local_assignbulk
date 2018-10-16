@@ -635,6 +635,12 @@ class bulk_uploader {
         return $userfb;
     }
 
+    /**
+     * Bad name for function, sort of... it returns the filepath + name associated with a rawImages directory
+     * or false if this isn't a rawImages directory.
+     * @param  stored_file $file A rawImages directory or a file within it
+     * @return boolean|string    as above
+     */
     private function is_raw_images(stored_file $file) {
         $pathinfo = pathinfo($file->get_filepath());
         if (array_key_exists('extension', $pathinfo) && ($pathinfo['extension'] == "rawImages")) {
@@ -647,6 +653,10 @@ class bulk_uploader {
         return false;
     }
 
+    /**
+     * Adds the uploaded rendered pages to the assignment's cache of pre-rendered pages
+     * @param  stdClass $submission A submission in the assignment
+     */
     private function handle_raw_images($submission) {
         $pagenumber = 0;
         $fs = get_file_storage();
