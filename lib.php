@@ -24,6 +24,8 @@
 
 defined('MOODLE_INTERNAL') || die;
 
+require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
 /**
  * Add the bulk upload option to assignment if the user has the correct permissions.
  * @see  settings_navigation::load_local_plugin_settings()
