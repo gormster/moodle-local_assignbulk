@@ -582,6 +582,9 @@ class bulk_uploader {
      * then submitting that form to the assignment. From the assignment's perspective, this is identical to the user themselves
      * creating a submission using the normal web interface.
      *
+     * TODO: This doesn't really use the passed in $files parameter, instead relying on the construction of the user's
+     * submission file area. Should we get rid of the param, or start using it?
+     *
      * @uses \local_assignbulk\upload_form
      * @param  stored_file[]  $files  The files to submit on behalf of the user
      * @param  stdClass       $user   The user to submit on behalf of
