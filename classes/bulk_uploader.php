@@ -32,6 +32,11 @@ use stored_file;
 use stdClass;
 use moodle_url;
 
+use \assignfeedback_editpdf\document_services;
+use \assignfeedback_editpdf\combined_document;
+use \assignfeedback_editpdf\pdf;
+use \core_files\conversion;
+
 defined('MOODLE_INTERNAL') or die();
 
 /**
@@ -82,6 +87,25 @@ class bulk_uploader {
     private $commit;
 
     /**
+     * The pre-rendered images for PDF-compatible files. Keyed by the ORIGINAL file location
+     * (after unzip_top_level_files).
+     * @var [string filepath => => stored_file rendered_page_dir]
+     */
+    private $rawimages;
+
+    /**
+     * Since rawimages is keyed by the original file path, we need to keep track of those.
+     * @var [string filepath => string contenthash]
+     */
+    private $filepaths;
+
+    /**
+     * Progress instance
+     * @var \core\progress\base
+     */
+    private $progress;
+
+    /**
      * Constructor.
      * @param assign $assign Assignment instance
      * @param string $ident  The identifying mark for a user; the field in a user record which
@@ -92,6 +116,7 @@ class bulk_uploader {
         $this->ident = $ident;
         $id = $assign->get_course_module()->id;
         $this->errorurl = new moodle_url('local/assignbulk/upload.php', ['id' => $id]);
+        $this->rawimages = [];
     }
 
     /**
@@ -102,11 +127,17 @@ class bulk_uploader {
      *                                 users: array[] An array of arrays with keys fullname, id, notices (string[]) and submissions (array[])
      *                                 warnings: string[] The paths of files that weren't matched to any user
      */
-    public function execute($draftitemid, $commit = true) {
+    public function execute($draftitemid, $commit = true, \core\progress\base $progress = null) {
 
         $feedback = new stdClass();
+        if (empty($progress)) {
+            $progress = new \core\progress\none();
+        }
+        $this->progress = $progress;
 
         $this->commit = $commit;
+
+        $this->progress->start_progress('Uploading', 6);
 
         // 1. Copy files to staging area.
         $this->save_draft_files($draftitemid);
@@ -122,11 +153,15 @@ class bulk_uploader {
 
         // 5. Make a note of the remaining non-directory contents of the staging area to report to the user.
         $feedback->warnings = $this->remaining_unstaged_files();
+        $this->progress->increment_progress();
 
         // 6. Delete the contents of the staging area.
         if (empty($feedback->warnings)) {
             $this->delete_staging_area();
         }
+        $this->progress->increment_progress();
+
+        $this->progress->end_progress();
 
         return $feedback;
 
@@ -156,9 +191,13 @@ class bulk_uploader {
         $change->contextid = $contextid;
         $change->component = 'local_assignbulk';
         $change->filearea = 'staging';
+
+        $this->progress->start_progress('Saving to staging area', count($files));
         foreach ($files as $file) {
             $fs->create_file_from_storedfile($change, $file);
+            $this->progress->increment_progress();
         }
+        $this->progress->end_progress();
 
         $this->staging = [$change->contextid, $change->component, $change->filearea, $draftitemid];
     }
@@ -171,24 +210,31 @@ class bulk_uploader {
         $fs = get_file_storage();
         $s = $this->staging;
         $topfiles = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], '/', false, false);
+
+        $this->progress->start_progress('Unzipping top-level files', count($topfiles));
         foreach ($topfiles as $file) {
+
             // If the item is not a compressed file, continue.
             $mimetype = $file->get_mimetype();
             $packer = get_file_packer($mimetype);
             if (empty($packer)) {
+                $this->progress->increment_progress();
                 continue;
             }
 
             // If the item matches the naming scheme, continue.
             $filename = $this->effective_file_name($file);
             if (!empty($this->user_for_ident($filename, false))) {
+                $this->progress->increment_progress();
                 continue;
             }
 
             // Unzip the item in place.
             $pathbase = '/' . $file->get_filename() . '/';
             $fs->create_directory($s[0], $s[1], $s[2], $s[3], $pathbase);
-            $results = $file->extract_to_storage($packer, $s[0], $s[1], $s[2], $s[3], $pathbase);
+            $fileprogress = new unzip_progress($this->progress, 'Unzipping ' . $file->get_filename());
+            $results = $file->extract_to_storage($packer, $s[0], $s[1], $s[2], $s[3], $pathbase, null, $fileprogress);
+            unset($fileprogress);
 
             // If unzipping the file causes any overwritten files, throw an exception.
             foreach ($results as $filename => $result) {
@@ -201,6 +247,7 @@ class bulk_uploader {
             // checking the remaining contents of the staging area.
             $file->delete();
         }
+        $this->progress->end_progress();
     }
 
     /**
@@ -216,22 +263,39 @@ class bulk_uploader {
 
         $subpaths = [];
 
+        $this->progress->start_progress('Walking over '.$directory, count($files));
         foreach ($files as $file) {
+
+            if ($filepath = $this->is_raw_images($file)) {
+                if ($file->is_directory()) {
+                    $this->rawimages[$filepath] = $file;
+                }
+                $this->progress->increment_progress();
+                continue;
+            }
+
             $filename = $this->effective_file_name($file);
+
             $user = $this->user_for_ident($filename, false);
             if (!empty($user)) {
+                $this->filepaths[$file->get_contenthash()] = $file->get_filepath() . $file->get_filename();
                 $this->copy_to_userdir($file, $user);
+                $this->progress->increment_progress();
                 continue;
             }
 
             if ($file->is_directory()) {
                 $subpaths[] = $file->get_filepath();
+                continue; // don't increment the progress, it will be handled by the next loop
             }
+
+            $this->progress->increment_progress();
         }
 
         foreach ($subpaths as $subpath) {
             $this->walk_step($subpath);
         }
+        $this->progress->end_progress();
     }
 
     /**
@@ -263,23 +327,29 @@ class bulk_uploader {
             $useridentsreverse[$user->id] = $userident;
         }
 
+        $this->progress->start_progress('Creating submissions', count($submissions));
+
         $feedback = [];
         foreach ($submissions as $userid => $files) {
             $userident = $useridentsreverse[$userid];
             $user = $this->user_for_ident($userident);
             $this->simplify_user_paths($files, $userident);
             $this->delete_empty_directories($files, $userid);
+
             if ($this->commit) {
                 $feedback[] = $this->push_files_to_assign($files, $user);
             } else {
                 // Mock up preview feedback.
-                $feedback[] = ['fullname' => fullname($user),
-                'id' => $user->id,
-                'submissions' => array_map(function($v) {
-                    return ['filename' => $v->get_filepath() . $v->get_filename()];
-                }, $files)];
+                $submissions = [];
+                foreach ($files as $file) {
+                    $filename = $this->filepaths[$file->get_contenthash()];
+                    $submissions[] = ['filename' => $file->get_filepath() . $file->get_filename(), 'rawImages' => array_key_exists($filename, $this->rawimages)];
+                }
+                $feedback[] = ['fullname' => fullname($user), 'id' => $user->id, 'submissions' => $submissions];
             }
+            $this->progress->increment_progress();
         }
+        $this->progress->end_progress();
 
         return $feedback;
 
@@ -298,6 +368,9 @@ class bulk_uploader {
         $remaining = [];
         foreach ($staging as $file) {
             if ($file->is_directory()) {
+                continue;
+            }
+            if ($this->is_raw_images($file)) {
                 continue;
             }
 
@@ -447,11 +520,8 @@ class bulk_uploader {
      * @return [type]            [description]
      */
     protected function effective_file_name(stored_file $file) {
-        if ($file->is_directory()) {
-            return basename($file->get_filepath());
-        } else {
-            return pathinfo($file->get_filename(), PATHINFO_FILENAME);
-        }
+        $filename = $file->is_directory() ? basename($file->get_filepath()) : $file->get_filename();
+        return pathinfo($filename, PATHINFO_FILENAME);
     }
 
     /**
@@ -551,6 +621,9 @@ class bulk_uploader {
      * then submitting that form to the assignment. From the assignment's perspective, this is identical to the user themselves
      * creating a submission using the normal web interface.
      *
+     * TODO: This doesn't really use the passed in $files parameter, instead relying on the construction of the user's
+     * submission file area. Should we get rid of the param, or start using it?
+     *
      * @uses \local_assignbulk\upload_form
      * @param  stored_file[]  $files  The files to submit on behalf of the user
      * @param  stdClass       $user   The user to submit on behalf of
@@ -580,6 +653,16 @@ class bulk_uploader {
         file_merge_draft_area_into_draft_area($draftitemid, $formdata->files_filemanager);
 
         $this->assign->save_submission((object)$formdata, $notices);
+
+        // Add the raw images
+        if (!empty($this->rawimages)) {
+            $editpdf = $this->assign->get_feedback_plugin_by_type('editpdf');
+            if (!is_null($editpdf)) {
+                $submission = $this->assign->get_user_submission($user->id, false, -1);
+                $this->handle_raw_images($submission);
+            }
+        }
+
         if (!empty($notices)) {
             $userfb['notices'] = $notices;
         } else {
@@ -590,6 +673,83 @@ class bulk_uploader {
         }
 
         return $userfb;
+    }
+
+    /**
+     * Bad name for function, sort of... it returns the filepath + name associated with a rawImages directory
+     * or false if this isn't a rawImages directory.
+     * @param  stored_file $file A rawImages directory or a file within it
+     * @return boolean|string    as above
+     */
+    private function is_raw_images(stored_file $file) {
+        $pathinfo = pathinfo($file->get_filepath());
+        if (array_key_exists('extension', $pathinfo) && ($pathinfo['extension'] == "rawImages")) {
+            if ($pathinfo['dirname'] == '/') {
+                return '/' . $pathinfo['filename'];
+            } else {
+                return $pathinfo['dirname'] . '/' . $pathinfo['filename'];
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adds the uploaded rendered pages to the assignment's cache of pre-rendered pages
+     * @param  stdClass $submission A submission in the assignment
+     */
+    private function handle_raw_images($submission) {
+        $pagenumber = 0;
+        $fs = get_file_storage();
+        $contextid = $this->assign->get_context()->id;
+
+        $document = document_services::get_combined_pdf_for_attempt($this->assign, $submission->userid, -1);
+
+        $record = new \stdClass();
+        $record->contextid = $contextid;
+        $record->component = 'assignfeedback_editpdf';
+        $record->filearea = document_services::PAGE_IMAGE_FILEAREA;
+        $record->itemid = $document->get_combined_file()->get_itemid();
+        $record->filepath = '/';
+        $record->timemodified = $submission->timemodified;
+
+        foreach ($document->get_source_files() as $file) {
+            if ($file instanceof conversion) {
+                $sourcefile = $file->get_sourcefile();
+                $destfile = $file->get_destfile();
+            } else if ($file instanceof stored_file) {
+                $sourcefile = $destfile = $file;
+            }
+
+            $filename = $this->filepaths[$sourcefile->get_contenthash()];
+            if (isset($this->rawimages[$filename])) {
+                $rawdir = $this->rawimages[$filename];
+                $compatiblepdf = pdf::ensure_pdf_compatible($destfile);
+                if ($compatiblepdf) {
+                    $pdf = new pdf();
+                    $numpages = $pdf->load_pdf($compatiblepdf);
+                    for($i = 0; $i < $numpages; $i++) {
+                        $rawfilename = "image_page$i.png";
+                        $rawfile = $fs->get_file(
+                            $rawdir->get_contextid(),
+                            $rawdir->get_component(),
+                            $rawdir->get_filearea(),
+                            $rawdir->get_itemid(),
+                            $rawdir->get_filepath(),
+                            $rawfilename
+                        );
+
+                        if ($rawfile) {
+                            $record->filename = 'image_page' . ($pagenumber + $i) . '.png';
+                            if ($oldfile = $fs->get_file($record->contextid, $record->component, $record->filearea, $record->itemid, $record->filepath, $record->filename)) {
+                                $oldfile->delete();
+                            }
+                            $fs->create_file_from_storedfile($record, $rawfile);
+                        }
+                    }
+                    $pagenumber += $numpages;
+                }
+            }
+        }
     }
 
     /**

@@ -53,7 +53,7 @@
 <li class="notice">{{.}}</li>
 {{/notices}}
 {{#submissions}}
-<li>{{filename}}</li>
+<li>{{filename}}{{#rawImages}} <em>({{#str}} includesrawimages, local_assignbulk {{/str}})</em>{{/rawImages}}</li>
 {{/submissions}}
 </ul></li>
 {{/users}}

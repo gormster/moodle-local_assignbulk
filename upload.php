@@ -22,6 +22,8 @@
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+define('NO_OUTPUT_BUFFERING', true);
+
 require_once('../../config.php');
 require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
@@ -64,7 +66,9 @@ $showform = true;
 if ($data = $mform->get_data()) {
     $commit = isset($data->submitbutton);
     $uploader = new local_assignbulk\bulk_uploader($assign, $data->identifier);
-    $feedback = $uploader->execute($data->submissions, $commit);
+    $progress = new \core\progress\display_if_slow();
+    $progress->set_display_names(true);
+    $feedback = $uploader->execute($data->submissions, $commit, $progress);
     $feedback->preview = !$commit;
     $feedback->anywarnings = count($feedback->warnings);
 

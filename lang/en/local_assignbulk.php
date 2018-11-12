@@ -47,3 +47,4 @@ $string['invalidident'] = 'Not a valid {$a}';
 $string['invaliduser'] = '{$a} is not a submitter in this assignment';
 $string['identnotunique'] = 'Identifier is not unique: multiple users match {$a->ident} = {$a->value}';
 $string['emptydir'] = 'This folder is empty';
+$string['includesrawimages'] = 'Includes raw images';
