@@ -99,6 +99,11 @@ class bulk_uploader {
      */
     private $filepaths;
 
+    /**
+     * Progress instance
+     * @var \core\progress\base
+     */
+    private $progress;
 
     /**
      * Constructor.
@@ -122,11 +127,17 @@ class bulk_uploader {
      *                                 users: array[] An array of arrays with keys fullname, id, notices (string[]) and submissions (array[])
      *                                 warnings: string[] The paths of files that weren't matched to any user
      */
-    public function execute($draftitemid, $commit = true) {
+    public function execute($draftitemid, $commit = true, \core\progress\base $progress = null) {
 
         $feedback = new stdClass();
+        if (empty($progress)) {
+            $progress = new \core\progress\none();
+        }
+        $this->progress = $progress;
 
         $this->commit = $commit;
+
+        $this->progress->start_progress('Uploading', 6);
 
         // 1. Copy files to staging area.
         $this->save_draft_files($draftitemid);
@@ -142,11 +153,15 @@ class bulk_uploader {
 
         // 5. Make a note of the remaining non-directory contents of the staging area to report to the user.
         $feedback->warnings = $this->remaining_unstaged_files();
+        $this->progress->increment_progress();
 
         // 6. Delete the contents of the staging area.
         if (empty($feedback->warnings)) {
             $this->delete_staging_area();
         }
+        $this->progress->increment_progress();
+
+        $this->progress->end_progress();
 
         return $feedback;
 
@@ -176,9 +191,13 @@ class bulk_uploader {
         $change->contextid = $contextid;
         $change->component = 'local_assignbulk';
         $change->filearea = 'staging';
+
+        $this->progress->start_progress('Saving to staging area', count($files));
         foreach ($files as $file) {
             $fs->create_file_from_storedfile($change, $file);
+            $this->progress->increment_progress();
         }
+        $this->progress->end_progress();
 
         $this->staging = [$change->contextid, $change->component, $change->filearea, $draftitemid];
     }
@@ -191,24 +210,31 @@ class bulk_uploader {
         $fs = get_file_storage();
         $s = $this->staging;
         $topfiles = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], '/', false, false);
+
+        $this->progress->start_progress('Unzipping top-level files', count($topfiles));
         foreach ($topfiles as $file) {
+
             // If the item is not a compressed file, continue.
             $mimetype = $file->get_mimetype();
             $packer = get_file_packer($mimetype);
             if (empty($packer)) {
+                $this->progress->increment_progress();
                 continue;
             }
 
             // If the item matches the naming scheme, continue.
             $filename = $this->effective_file_name($file);
             if (!empty($this->user_for_ident($filename, false))) {
+                $this->progress->increment_progress();
                 continue;
             }
 
             // Unzip the item in place.
             $pathbase = '/' . $file->get_filename() . '/';
             $fs->create_directory($s[0], $s[1], $s[2], $s[3], $pathbase);
-            $results = $file->extract_to_storage($packer, $s[0], $s[1], $s[2], $s[3], $pathbase);
+            $fileprogress = new unzip_progress($this->progress, 'Unzipping ' . $file->get_filename());
+            $results = $file->extract_to_storage($packer, $s[0], $s[1], $s[2], $s[3], $pathbase, null, $fileprogress);
+            unset($fileprogress);
 
             // If unzipping the file causes any overwritten files, throw an exception.
             foreach ($results as $filename => $result) {
@@ -221,6 +247,7 @@ class bulk_uploader {
             // checking the remaining contents of the staging area.
             $file->delete();
         }
+        $this->progress->end_progress();
     }
 
     /**
@@ -236,11 +263,14 @@ class bulk_uploader {
 
         $subpaths = [];
 
+        $this->progress->start_progress('Walking over '.$directory, count($files));
         foreach ($files as $file) {
+
             if ($filepath = $this->is_raw_images($file)) {
                 if ($file->is_directory()) {
                     $this->rawimages[$filepath] = $file;
                 }
+                $this->progress->increment_progress();
                 continue;
             }
 
@@ -250,17 +280,22 @@ class bulk_uploader {
             if (!empty($user)) {
                 $this->filepaths[$file->get_contenthash()] = $file->get_filepath() . $file->get_filename();
                 $this->copy_to_userdir($file, $user);
+                $this->progress->increment_progress();
                 continue;
             }
 
             if ($file->is_directory()) {
                 $subpaths[] = $file->get_filepath();
+                continue; // don't increment the progress, it will be handled by the next loop
             }
+
+            $this->progress->increment_progress();
         }
 
         foreach ($subpaths as $subpath) {
             $this->walk_step($subpath);
         }
+        $this->progress->end_progress();
     }
 
     /**
@@ -292,6 +327,8 @@ class bulk_uploader {
             $useridentsreverse[$user->id] = $userident;
         }
 
+        $this->progress->start_progress('Creating submissions', count($submissions));
+
         $feedback = [];
         foreach ($submissions as $userid => $files) {
             $userident = $useridentsreverse[$userid];
@@ -310,7 +347,9 @@ class bulk_uploader {
                 }
                 $feedback[] = ['fullname' => fullname($user), 'id' => $user->id, 'submissions' => $submissions];
             }
+            $this->progress->increment_progress();
         }
+        $this->progress->end_progress();
 
         return $feedback;
 
