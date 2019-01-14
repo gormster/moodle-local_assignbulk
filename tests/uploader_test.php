@@ -25,6 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 use local_assignbulk\bulk_uploader;
+use assignfeedback_editpdf\document_services;
+
 require_once('base.php');
 
 /**
@@ -103,6 +105,77 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
             $fb = $userfeedback[$userid];
             $this->assertEquals($expected, array_column($fb['submissions'], 'filename'), 'File arrays were not equal', 0, 10, true);
         }
+    }
+
+    /**
+     * Tests the rawImages upload feature
+     * @param  string $fixture       The name of the fixture
+     * @param  string $ident         The user identifier field
+     * @param  array  $pagehashes    [$username => [$pagecontenthash]]
+     * @dataProvider rawimages_files
+     */
+    public function test_raw_images($fixture, $ident, $pagehashes) {
+        $draftitemid = $this->prepare_fixture($fixture);
+
+        $uploader = new bulk_uploader($this->assign, $ident);
+
+        $uploader->execute($draftitemid);
+
+        $fs = get_file_storage();
+        $contextid = $this->assign->get_context()->id;
+        $plugin = $this->assign->get_submission_plugin_by_type('file');
+        foreach ($this->students as $userid => $user) {
+            $expected = $pagehashes[$user->username];
+            $grade = $this->assign->get_user_grade($userid, true);
+
+            // editpdf doesn't give us a good way to check if page files have been rendered, so just check they exist
+            $pagefiles = $fs->get_area_files($contextid, 'assignfeedback_editpdf', document_services::PAGE_IMAGE_FILEAREA, $grade->id);
+
+            if (empty($expected)) {
+                $this->assertEmpty($pagefiles);
+                continue;
+            }
+
+            $pages = [];
+            foreach ($pagefiles as $pagefile) {
+                $pages[$pagefile->get_filename()] = $pagefile->get_contenthash();
+            }
+
+            foreach ($expected as $pagenum => $contenthash) {
+                $filename = 'image_page' . $pagenum . '.png';
+                $this->assertEquals($contenthash, $pages[$filename]);
+            }
+        }
+    }
+
+    public function rawimages_files() {
+        $contenthashes = [
+            'user01' => ['d975a1241637f369ef870f734b6bff8d56749bb1'],
+            'user02' => ['7dfdfd04963bef07834039ebc77cfe6a87075edc'],
+            'user03' => ['216a6c75c0646108b73af8555deb330035dbbf11'],
+            'user04' => ['ff3afdf4fe63c4739df071c269f464a770697a3b'],
+            'user05' => ['aef1689fec1ecadd341c5895b134ac341c8123c8'],
+            'user06' => ['3371562cf1ab5a04454fb938a86c5990e5299ceb'],
+            'user07' => ['faa76e605cb4fa65372dd4307df7bc076878b7f8'],
+            'user08' => ['747acf1ea574b8f0e7770579a4ebe05db719dbac'],
+            'user09' => ['185d491ac8bf8fb6039e25305d4c3b37262e221b'],
+            'user10' => ['5d2bc8448a87b0ed18378c4e83c967d536f20265'],
+            'user11' => ['4074349162a54a7b4cd2638b1113b87729bfe6af'],
+            'user12' => ['d2a86bb348b6f9a0e1b218bc98593421029a7989'],
+            'user13' => ['ee58c0cadec5ad4f6ca55aca760cb11e781a5906'],
+            'user14' => ['c8febcf4a907da13eb4e069284171ecf6911f3de'],
+            'user15' => ['ce90403ea2f3db8b5b58ef94e3e71b7792b33b98'],
+            'user16' => ['bc665ea26740038740ddbae143084de737a73de8'],
+            'user17' => ['9adbe27c7d1242a40edccdaff608c44bbb660fea'],
+            'user18' => ['fd693de764c2499f7cf6f3801df55d42e7ac34e2'],
+            'user19' => ['01ab35d1f145e173f56d6f69182da5c2acb84463'],
+            'user20' => ['730b8602e9864e09fc505ab490e99a39d0d68fdc']
+        ];
+
+        return array_column([
+            ['rawimages_top_level_files', 'username', $contenthashes],
+            ['rawimages_folder_per_user', 'username', $contenthashes]
+        ], null, 0);
     }
 
     /**

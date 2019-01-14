@@ -266,6 +266,7 @@ class bulk_uploader {
         $this->progress->start_progress('Walking over '.$directory, count($files));
         foreach ($files as $file) {
 
+            // This is necessary to handle rawImages for one-file submissions
             if ($filepath = $this->is_raw_images($file)) {
                 if ($file->is_directory()) {
                     $this->rawimages[$filepath] = $file;
@@ -278,7 +279,6 @@ class bulk_uploader {
 
             $user = $this->user_for_ident($filename, false);
             if (!empty($user)) {
-                $this->filepaths[$file->get_contenthash()] = $file->get_filepath() . $file->get_filename();
                 $this->copy_to_userdir($file, $user);
                 $this->progress->increment_progress();
                 continue;
@@ -593,25 +593,37 @@ class bulk_uploader {
 
         if ($file->is_directory()) {
             // Copy every file in the directory.
-            $subfiles = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], $file->get_filepath(), true, false);
+            $subfiles = $fs->get_directory_files($s[0], $s[1], $s[2], $s[3], $file->get_filepath(), true, true);
         } else {
             $subfiles = [$file];
         }
 
         foreach ($subfiles as $file) {
-            // Delete the old file if it exists from a previous failed upload.
-            $oldfile = $fs->get_file($userdir->contextid,
-                                     $userdir->component,
-                                     $userdir->filearea,
-                                     $userdir->itemid,
-                                     $file->get_filepath(),
-                                     $file->get_filename());
-            if (!empty($oldfile)) {
-                $oldfile->delete();
+            if ($file->is_directory()) {
+                // Handle rawImages in a multi-file directory based upload
+                if ($filepath = $this->is_raw_images($file)) {
+                    $this->rawimages[$filepath] = $file;
+                }
+            } else {
+                if ($this->is_raw_images($file)) {
+                    continue;
+                }
+
+                // Delete the old file if it exists from a previous failed upload.
+                $oldfile = $fs->get_file($userdir->contextid,
+                                         $userdir->component,
+                                         $userdir->filearea,
+                                         $userdir->itemid,
+                                         $file->get_filepath(),
+                                         $file->get_filename());
+                if (!empty($oldfile)) {
+                    $oldfile->delete();
+                }
+                $this->filepaths[$file->get_contenthash()] = $file->get_filepath() . $file->get_filename();
+                $fs->create_file_from_storedfile($userdir, $file);
+                // Delete the stored file in the staging area.
+                $file->delete();
             }
-            $fs->create_file_from_storedfile($userdir, $file);
-            // Delete the stored file in the staging area.
-            $file->delete();
         }
     }
 
@@ -655,11 +667,12 @@ class bulk_uploader {
         $this->assign->save_submission((object)$formdata, $notices);
 
         // Add the raw images
+        $rawimages = false;
         if (!empty($this->rawimages)) {
             $editpdf = $this->assign->get_feedback_plugin_by_type('editpdf');
             if (!is_null($editpdf)) {
                 $submission = $this->assign->get_user_submission($user->id, false, -1);
-                $this->handle_raw_images($submission);
+                $rawimages = $this->handle_raw_images($submission);
             }
         }
 
@@ -668,7 +681,8 @@ class bulk_uploader {
         } else {
             $userfb['submissions'] = [];
             foreach ($files as $file) {
-                $userfb['submissions'][] = ['filename' => $file->get_filepath() . $file->get_filename()];
+                $userfb['submissions'][] = ['filename' => $file->get_filepath() . $file->get_filename(),
+                'rawImages' => $rawimages];
             }
         }
 
@@ -712,12 +726,21 @@ class bulk_uploader {
         $record->filepath = '/';
         $record->timemodified = $submission->timemodified;
 
+        // We can only handle combined documents that are ready to go now.
+        // Frankly, conversions can't properly be supported at all, but if
+        // they occurred instantly then maybe they're a one-to-one conversion?
+
+        if ($document->get_status() !== combined_document::STATUS_COMPLETE) {
+            return false;
+        }
+
         foreach ($document->get_source_files() as $file) {
             if ($file instanceof conversion) {
                 $sourcefile = $file->get_sourcefile();
                 $destfile = $file->get_destfile();
             } else if ($file instanceof stored_file) {
-                $sourcefile = $destfile = $file;
+                $sourcefile = $file;
+                $destfile = $file;
             }
 
             $filename = $this->filepaths[$sourcefile->get_contenthash()];
@@ -743,13 +766,21 @@ class bulk_uploader {
                             if ($oldfile = $fs->get_file($record->contextid, $record->component, $record->filearea, $record->itemid, $record->filepath, $record->filename)) {
                                 $oldfile->delete();
                             }
-                            $fs->create_file_from_storedfile($record, $rawfile);
+                            $newfile = $fs->create_file_from_storedfile($record, $rawfile);
+
+                            // Add the readonly version
+                            if ($oldfile = $fs->get_file($record->contextid, $record->component, document_services::PAGE_IMAGE_READONLY_FILEAREA, $record->itemid, $record->filepath, $record->filename)) {
+                                $oldfile->delete();
+                            }
+                            $fs->create_file_from_storedfile(['filearea' => document_services::PAGE_IMAGE_READONLY_FILEAREA], $newfile);
                         }
                     }
                     $pagenumber += $numpages;
                 }
             }
         }
+
+        return true;
     }
 
     /**
