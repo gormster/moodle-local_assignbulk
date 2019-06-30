@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_assignbulk';
-$plugin->release = '0.2.1';
+$plugin->release = '0.2.2';
 $plugin->version = 2018101900;
 $plugin->requires = 2016052300;
 $plugin->maturity = MATURITY_ALPHA;
