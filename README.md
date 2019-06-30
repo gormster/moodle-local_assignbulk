@@ -1,6 +1,6 @@
 # Assignment Bulk Upload #
 
-Bulk upload submision files to assignment
+Bulk upload file submissions to assignment
 
 This plugin allows you to submit files for many users at once. You can upload a zip file of your students' submissions, and with a single click all of their submissions will be updated.
 

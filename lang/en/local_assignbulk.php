@@ -28,20 +28,14 @@ defined('MOODLE_INTERNAL') || die();
 $string['pluginname'] = 'Assignment Bulk Upload';
 $string['bulkuploadsubmissions'] = 'Bulk upload submissions';
 // TODO: this is terrible, fix it!
-$string['uploadhelp'] = <<<HTML
+$string['uploadhelp'] = '
 <p>Using this tool, you can upload assignment submissions as files. Note that this only works for the <strong>File</strong> submission type.</p>
 <p>You can upload individual files, a ZIP containing the submission files, or multiple ZIP files containing multiple file submissions for each student. You should name each submission file with some way to identify the student, either with their username, ID number, or email address.</p>
 <p>To submit multiple files per student, you can use folders.</p>
-HTML;
-$string['uploadcomplete'] = <<<HTML
-<p><strong>Upload complete.</strong> The following users have had their submission updated with these files:</p>
-HTML;
-$string['uploadpreview'] = <<<HTML
-<p><strong>This is a preview.</strong> The following users will have their submission updated with these files:</p>
-HTML;
-$string['warnings'] = <<<HTML
-<p class="warning">The following files were not processed:</p>
-HTML;
+';
+$string['uploadcomplete'] = '<p><strong>Upload complete.</strong> The following users have had their submission updated with these files:</p>'
+$string['uploadpreview'] = '<p><strong>This is a preview.</strong> The following users will have their submission updated with these files:</p>'
+$string['warnings'] = '<p class="warning">The following files were not processed:</p>'
 $string['identifier'] = 'Identify user by';
 $string['invalidident'] = 'Not a valid {$a}';
 $string['invaliduser'] = '{$a} is not a submitter in this assignment';
