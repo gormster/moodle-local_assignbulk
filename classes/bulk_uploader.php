@@ -124,8 +124,8 @@ class bulk_uploader {
      * @param  int     $draftitemid The itemid of a draft area which contains the files to be uploaded
      * @param  boolean $commit      If false, do a dry run without actually committing the files to the submissions
      * @return stdClass             An object contaning the following fields:
-     *                                 users: array[] An array of arrays with keys fullname, id, notices (string[]) and submissions (array[])
-     *                                 warnings: string[] The paths of files that weren't matched to any user
+     *  users: array[] An array of arrays with keys fullname, id, notices (string[]) and submissions (array[])
+     *  warnings: string[] The paths of files that weren't matched to any user
      */
     public function execute($draftitemid, $commit = true, \core\progress\base $progress = null) {
 
@@ -266,7 +266,7 @@ class bulk_uploader {
         $this->progress->start_progress('Walking over '.$directory, count($files));
         foreach ($files as $file) {
 
-            // This is necessary to handle rawImages for one-file submissions
+            // This is necessary to handle rawImages for one-file submissions.
             if ($filepath = $this->is_raw_images($file)) {
                 if ($file->is_directory()) {
                     $this->rawimages[$filepath] = $file;
@@ -286,7 +286,7 @@ class bulk_uploader {
 
             if ($file->is_directory()) {
                 $subpaths[] = $file->get_filepath();
-                continue; // don't increment the progress, it will be handled by the next loop
+                continue; // Don't increment the progress, it will be handled by the next loop.
             }
 
             $this->progress->increment_progress();
@@ -343,7 +343,10 @@ class bulk_uploader {
                 $submissions = [];
                 foreach ($files as $file) {
                     $filename = $this->filepaths[$file->get_contenthash()];
-                    $submissions[] = ['filename' => $file->get_filepath() . $file->get_filename(), 'rawImages' => array_key_exists($filename, $this->rawimages)];
+                    $submissions[] = [
+                        'filename' => $file->get_filepath() . $file->get_filename(),
+                        'rawImages' => array_key_exists($filename, $this->rawimages)
+                    ];
                 }
                 $feedback[] = ['fullname' => fullname($user), 'id' => $user->id, 'submissions' => $submissions];
             }
@@ -600,7 +603,7 @@ class bulk_uploader {
 
         foreach ($subfiles as $file) {
             if ($file->is_directory()) {
-                // Handle rawImages in a multi-file directory based upload
+                // Handle rawImages in a multi-file directory based upload.
                 if ($filepath = $this->is_raw_images($file)) {
                     $this->rawimages[$filepath] = $file;
                 }
@@ -666,7 +669,7 @@ class bulk_uploader {
 
         $this->assign->save_submission((object)$formdata, $notices);
 
-        // Add the raw images
+        // Add the raw images.
         $rawimages = false;
         if (!empty($this->rawimages)) {
             $editpdf = $this->assign->get_feedback_plugin_by_type('editpdf');
@@ -750,7 +753,7 @@ class bulk_uploader {
                 if ($compatiblepdf) {
                     $pdf = new pdf();
                     $numpages = $pdf->load_pdf($compatiblepdf);
-                    for($i = 0; $i < $numpages; $i++) {
+                    for ($i = 0; $i < $numpages; $i++) {
                         $rawfilename = "image_page$i.png";
                         $rawfile = $fs->get_file(
                             $rawdir->get_contextid(),
@@ -763,16 +766,33 @@ class bulk_uploader {
 
                         if ($rawfile) {
                             $record->filename = 'image_page' . ($pagenumber + $i) . '.png';
-                            if ($oldfile = $fs->get_file($record->contextid, $record->component, $record->filearea, $record->itemid, $record->filepath, $record->filename)) {
+                            $oldfile = $fs->get_file(
+                                $record->contextid,
+                                $record->component,
+                                $record->filearea,
+                                $record->itemid,
+                                $record->filepath,
+                                $record->filename);
+                            if ($oldfile) {
                                 $oldfile->delete();
                             }
                             $newfile = $fs->create_file_from_storedfile($record, $rawfile);
 
-                            // Add the readonly version
-                            if ($oldfile = $fs->get_file($record->contextid, $record->component, document_services::PAGE_IMAGE_READONLY_FILEAREA, $record->itemid, $record->filepath, $record->filename)) {
+                            // Add the readonly version.
+                            $oldfile = $fs->get_file(
+                                $record->contextid,
+                                $record->component,
+                                document_services::PAGE_IMAGE_READONLY_FILEAREA,
+                                $record->itemid,
+                                $record->filepath,
+                                $record->filename);
+                            if ($oldfile) {
                                 $oldfile->delete();
                             }
-                            $fs->create_file_from_storedfile(['filearea' => document_services::PAGE_IMAGE_READONLY_FILEAREA], $newfile);
+                            $fs->create_file_from_storedfile(
+                                ['filearea' => document_services::PAGE_IMAGE_READONLY_FILEAREA],
+                                $newfile
+                            );
                         }
                     }
                     $pagenumber += $numpages;

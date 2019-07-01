@@ -49,7 +49,7 @@ class behat_local_assignbulk extends behat_base {
      *
      * @param AfterStepScope $scope
      */
-    public function waitToDebugInBrowserOnStepErrorHook(AfterStepScope $scope) {
+    public function wait_to_debug_in_browser_on_step_error(AfterStepScope $scope) {
         if (defined('DEBUG')) {
             if ($scope->getTestResult()->getResultCode() == TestResult::FAILED) {
                 fwrite(STDOUT, PHP_EOL . "\x07PAUSING ON FAILURE - Press any key to continue" . PHP_EOL);

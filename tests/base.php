@@ -66,7 +66,10 @@ trait local_assignbulk_basic_test {
 
         // Make some users & some groups.
         for ($i = 0; $i < 20; $i++) {
-            $user = $this->getDataGenerator()->create_user(['username' => sprintf('user%02u', $i + 1), 'idnumber' => sprintf('%03u', $i + 1)]);
+            $user = $this->getDataGenerator()->create_user([
+                'username' => sprintf('user%02u', $i + 1),
+                'idnumber' => sprintf('%03u', $i + 1)
+            ]);
             $this->students[$user->id] = $user;
             $this->getDataGenerator()->enrol_user($user->id, $this->course->id);
         }

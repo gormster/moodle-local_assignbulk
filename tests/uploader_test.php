@@ -128,8 +128,13 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
             $expected = $pagehashes[$user->username];
             $grade = $this->assign->get_user_grade($userid, true);
 
-            // editpdf doesn't give us a good way to check if page files have been rendered, so just check they exist
-            $pagefiles = $fs->get_area_files($contextid, 'assignfeedback_editpdf', document_services::PAGE_IMAGE_FILEAREA, $grade->id);
+            // editpdf doesn't give us a good way to check if page files have been rendered, so just check they exist.
+            $pagefiles = $fs->get_area_files(
+                $contextid,
+                'assignfeedback_editpdf',
+                document_services::PAGE_IMAGE_FILEAREA,
+                $grade->id
+            );
 
             if (empty($expected)) {
                 $this->assertEmpty($pagefiles);
@@ -327,18 +332,18 @@ class local_assignbulk_uploader_testcase extends advanced_testcase {
 
         // Zip files are not unpacked if they match a user identifier
         // This way cumbersome files can be assessed without worrying about if they'll be unzipped by the plugin
-        $expectedzips = array_combine($usernames, array_map (function($v) { return ["/$v.zip"]; }, $usernames));
+        $expectedzips = array_combine($usernames, array_map( function($v) { return ["/$v.zip"]; }, $usernames));
 
         // For the case where there are multiple files or folders that could potentially cause clashes in simplifying names,
         // we simply do nothing. The chance of losing valuable information is too high.
-        $expectedmultifile = array_combine($usernames, array_map (function($v) { return [
+        $expectedmultifile = array_combine($usernames, array_map( function($v) { return [
             "/question1/$v/submission.txt",
             "/question2/$v/submission.txt",
             "/question3/$v/submission.txt",
             "/question3/$v/sbmn.txt"]; }, $usernames));
 
         // Even though this path could potentially be simplified, we leave it alone
-        $expectedmultidir = array_combine($usernames, array_map (function($v) { return [
+        $expectedmultidir = array_combine($usernames, array_map( function($v) { return [
             "/question1/$v/response/submission.txt",
             "/question2/$v/response/submission.txt",
             "/question3/$v/response/submission.txt",
